@@ -138,8 +138,31 @@ public class Lexer {
         return new Token(type, lexeme, startLine, startColumn);
     }
 
-    //часть рушана
     private Token readNumber(int startLine, int startColumn) {
-        throw new UnsupportedOperationException("readNumber() — to be implemented by Rushan");
+        StringBuilder text = new StringBuilder();
+
+        if (peek() == '+' || peek() == '-') {
+            text.append(advance());
+        }
+
+        while (!isAtEnd() && Character.isDigit(peek())) {
+            text.append(advance());
+        }
+
+        boolean isReal = false;
+        if (!isAtEnd() && peek() == '.') {
+            if (current + 1 >= source.length() || !Character.isDigit(peekNext())) {
+                throw new LexerException(
+                        "Malformed number '" + text + ".' at " + startLine + ":" + startColumn);
+            }
+            isReal = true;
+            text.append(advance());
+            while (!isAtEnd() && Character.isDigit(peek())) {
+                text.append(advance());
+            }
+        }
+
+        TokenType type = isReal ? TokenType.REAL : TokenType.INTEGER;
+        return new Token(type, text.toString(), startLine, startColumn);
     }
 }

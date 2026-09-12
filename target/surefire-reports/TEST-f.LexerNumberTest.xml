@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="f.LexerFoundationTest" time="0.059" tests="17" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="f.LexerNumberTest" time="0.02" tests="13" errors="0" skipped="0" failures="0">
   <properties>
     <property name="java.specification.version" value="21"/>
     <property name="sun.cpu.isalist" value="amd64"/>
@@ -58,21 +58,17 @@
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
     <property name="java.class.version" value="65.0"/>
   </properties>
-  <testcase name="commentAtEndOfFileWithoutNewline" classname="f.LexerFoundationTest" time="0.02"/>
-  <testcase name="quoteFollowedByListOpening" classname="f.LexerFoundationTest" time="0.001"/>
-  <testcase name="columnAfterLeadingSpacesOnNewLine" classname="f.LexerFoundationTest" time="0.001"/>
-  <testcase name="lineCommentIsSkipped" classname="f.LexerFoundationTest" time="0.0"/>
-  <testcase name="lineCommentBetweenTokens" classname="f.LexerFoundationTest" time="0.0"/>
-  <testcase name="nestedParenthesesSequence" classname="f.LexerFoundationTest" time="0.001"/>
-  <testcase name="whitespaceIsSkipped" classname="f.LexerFoundationTest" time="0.001"/>
-  <testcase name="lparenAndRparen" classname="f.LexerFoundationTest" time="0.0"/>
-  <testcase name="newlineIncrementsLineAndResetsColumn" classname="f.LexerFoundationTest" time="0.0"/>
-  <testcase name="tokenToStringContainsPosition" classname="f.LexerFoundationTest" time="0.007"/>
-  <testcase name="columnStartsAtOne" classname="f.LexerFoundationTest" time="0.0"/>
-  <testcase name="emptyInputProducesOnlyEof" classname="f.LexerFoundationTest" time="0.001"/>
-  <testcase name="columnAdvancesInsideLine" classname="f.LexerFoundationTest" time="0.0"/>
-  <testcase name="multipleCommentsAndLines" classname="f.LexerFoundationTest" time="0.0"/>
-  <testcase name="quoteToken" classname="f.LexerFoundationTest" time="0.001"/>
-  <testcase name="tabsAndCarriageReturnsAreSkipped" classname="f.LexerFoundationTest" time="0.001"/>
-  <testcase name="unexpectedCharacterRaisesLexerException" classname="f.LexerFoundationTest" time="0.004"/>
+  <testcase name="realNumbers" classname="f.LexerNumberTest" time="0.0"/>
+  <testcase name="signWithoutDigitsIsError" classname="f.LexerNumberTest" time="0.001"/>
+  <testcase name="unexpectedCharacterIsError" classname="f.LexerNumberTest" time="0.001"/>
+  <testcase name="mixedIntegers" classname="f.LexerNumberTest" time="0.0"/>
+  <testcase name="numberCoordinatesAreTracked" classname="f.LexerNumberTest" time="0.002"/>
+  <testcase name="errorCoordinatesReflectLineAndColumn" classname="f.LexerNumberTest" time="0.0"/>
+  <testcase name="numberAfterCommentHasCorrectCoordinates" classname="f.LexerNumberTest" time="0.001"/>
+  <testcase name="leadingDecimalPointIsError" classname="f.LexerNumberTest" time="0.0"/>
+  <testcase name="positiveInteger" classname="f.LexerNumberTest" time="0.0"/>
+  <testcase name="negativeInteger" classname="f.LexerNumberTest" time="0.002"/>
+  <testcase name="multiDigitRealParts" classname="f.LexerNumberTest" time="0.0"/>
+  <testcase name="explicitlyPositiveInteger" classname="f.LexerNumberTest" time="0.0"/>
+  <testcase name="trailingDecimalPointIsError" classname="f.LexerNumberTest" time="0.005"/>
 </testsuite>

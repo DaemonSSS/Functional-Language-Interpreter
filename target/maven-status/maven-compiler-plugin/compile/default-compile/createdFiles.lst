@@ -1,4 +1,5 @@
-f/TokenType.class
-f/LexerException.class
-f/Lexer.class
-f/Token.class
+f\Lexer.class
+f\Main.class
+f\LexerException.class
+f\Token.class
+f\TokenType.class
