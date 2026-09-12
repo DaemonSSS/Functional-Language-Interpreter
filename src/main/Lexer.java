@@ -96,9 +96,46 @@ public class Lexer {
         return current >= source.length();
     }
 
-    //часть Ильи
     private Token readWord(int startLine, int startColumn) {
-        throw new UnsupportedOperationException("readWord() — to be implemented by Ilya");
+        StringBuilder text = new StringBuilder();
+
+        while (!isAtEnd()) {
+            char c = peek();
+            if (Character.isLetter(c) || Character.isDigit(c)) {
+                text.append(advance());
+            } else {
+                break;
+            }
+        }
+
+        String lexeme = text.toString();
+        TokenType type;
+
+        switch (lexeme) {
+            case "quote":
+            case "setq":
+            case "func":
+            case "lambda":
+            case "prog":
+            case "cond":
+            case "while":
+            case "return":
+            case "break":
+                type = TokenType.KEYWORD;
+                break;
+            case "true":
+            case "false":
+                type = TokenType.BOOLEAN;
+                break;
+            case "null":
+                type = TokenType.NULL;
+                break;
+            default:
+                type = TokenType.IDENTIFIER;
+                break;
+        }
+
+        return new Token(type, lexeme, startLine, startColumn);
     }
 
     //часть рушана
