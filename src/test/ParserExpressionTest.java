@@ -42,7 +42,7 @@ public class ParserExpressionTest {
         assertEquals(1, prog.exprs.size());
         assertInstanceOf(ListExpr.class, prog.exprs.get(0));
         ListExpr list = (ListExpr) prog.exprs.get(0);
-        assertEquals(3, list.items.size()); // plus, nested list 1, nested list 2
+        assertEquals(3, list.items.size());
         assertInstanceOf(IdentifierExpr.class, list.items.get(0));
         assertEquals("plus", ((IdentifierExpr) list.items.get(0)).name);
     }
