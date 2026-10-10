@@ -20,12 +20,66 @@ public class Parser {
         while (!isAtEnd()) {
             exprs.add(parseExpr());
         }
-        return new Program(exprs, first.line, first.column);
+        int line = first.type == TokenType.EOF ? 1 : first.line;
+        int col = first.type == TokenType.EOF ? 1 : first.column;
+        return new Program(exprs, line, col);
     }
 
     public Expression parseExpr() {
+        if (isAtEnd()) {
+            Token t = peek();
+            throw new ParserException("Unexpected end of input", t.line, t.column);
+        }
         Token t = peek();
-        throw new ParserException("Expression parsing is not implemented", t.line, t.column);
+        if (t.type == TokenType.QUOTE) {
+            return parseQuoted();
+        } else if (t.type == TokenType.LPAREN) {
+            return parseList();
+        } else {
+            return parseAtom();
+        }
+    }
+
+    private Expression parseAtom() {
+        Token t = peek();
+        if (t.type == TokenType.IDENTIFIER) {
+            advance();
+            return new IdentifierExpr(t.lexeme, t.line, t.column);
+        } else if (t.type == TokenType.INTEGER || t.type == TokenType.REAL || 
+                   t.type == TokenType.BOOLEAN || t.type == TokenType.NULL) {
+            advance();
+            return new LiteralExpr(t.type, t.lexeme, t.line, t.column);
+        } else {
+            throw new ParserException("Expected expression, found '" + t.lexeme + "'", t.line, t.column);
+        }
+    }
+
+    private Expression parseQuoted() {
+        Token quoteToken = advance();
+        Expression inner = parseExpr();
+        return new QuoteExpr(inner, quoteToken.line, quoteToken.column);
+    }
+
+    private Expression parseList() {
+        Token open = expect(TokenType.LPAREN, "'('");
+        if (check(TokenType.KEYWORD)) {
+            Token keyword = advance();
+            return parseSpecialForm(keyword);
+        }
+        List<Expression> items = new ArrayList<>();
+        while (!check(TokenType.RPAREN) && !isAtEnd()) {
+            items.add(parseExpr());
+        }
+        if (items.isEmpty()) {
+            throw new ParserException("Empty list at " + open.line + ":" + open.column, open.line, open.column);
+        }
+        expect(TokenType.RPAREN, "')'");
+        return new ListExpr(items, open.line, open.column);
+    }
+
+    private Expression parseSpecialForm(Token keyword) {
+        // This will be implemented by Diliia, but ensures compilation if tested independently.
+        throw new ParserException("Special form '" + keyword.lexeme + "' not implemented yet", keyword.line, keyword.column);
     }
 
     Token peek() {
