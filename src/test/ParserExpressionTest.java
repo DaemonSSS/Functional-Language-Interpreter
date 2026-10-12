@@ -52,7 +52,9 @@ public class ParserExpressionTest {
         ParserException ex = assertThrows(ParserException.class, () -> {
             parseSource("()");
         });
-        assertTrue(ex.getMessage().contains("Empty list"), "Expected empty list error message");
+        assertEquals("Empty list at 1:1", ex.getMessage());
+        assertEquals(1, ex.line);
+        assertEquals(1, ex.column);
     }
 
     @Test
@@ -60,6 +62,50 @@ public class ParserExpressionTest {
         ParserException ex = assertThrows(ParserException.class, () -> {
             parseSource("(plus 1 2");
         });
-        assertNotNull(ex);
+        assertEquals("Unbalanced '(', reached end of input at 1:1", ex.getMessage());
+        assertEquals(1, ex.line);
+        assertEquals(1, ex.column);
+    }
+
+    @Test
+    public void testQuotedEmptyListError() {
+        ParserException ex = assertThrows(ParserException.class, () -> parseSource("'()"));
+        assertEquals("Empty list at 1:2", ex.getMessage());
+        assertEquals(1, ex.line);
+        assertEquals(2, ex.column);
+    }
+
+    @Test
+    public void testEmptyListOnAnotherLine() {
+        ParserException ex = assertThrows(ParserException.class, () -> parseSource("x\n  ()"));
+        assertEquals("Empty list at 2:3", ex.getMessage());
+        assertEquals(2, ex.line);
+        assertEquals(3, ex.column);
+    }
+
+    @Test
+    public void testOpeningParenWithoutElementsIsUnclosed() {
+        ParserException ex = assertThrows(ParserException.class, () -> parseSource("\n  ("));
+        assertEquals("Unbalanced '(', reached end of input at 2:3", ex.getMessage());
+        assertEquals(2, ex.line);
+        assertEquals(3, ex.column);
+    }
+
+    @Test
+    public void testUnclosedInnerListPosition() {
+        ParserException ex = assertThrows(ParserException.class,
+                () -> parseSource("(plus 1\n  (times 2"));
+        assertEquals("Unbalanced '(', reached end of input at 2:3", ex.getMessage());
+        assertEquals(2, ex.line);
+        assertEquals(3, ex.column);
+    }
+
+    @Test
+    public void testUnclosedOuterListPosition() {
+        ParserException ex = assertThrows(ParserException.class,
+                () -> parseSource("x\n  (plus (times 2 3)"));
+        assertEquals("Unbalanced '(', reached end of input at 2:3", ex.getMessage());
+        assertEquals(2, ex.line);
+        assertEquals(3, ex.column);
     }
 }
