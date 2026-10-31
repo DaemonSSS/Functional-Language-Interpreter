@@ -6,7 +6,7 @@
 Исходный текст → Lexer → токены → Parser → AST
 ```
 
-Текущий этап проекта — лексический и синтаксический анализ. Парсер проверяет структуру выражений и специальных форм. Семантический анализ и выполнение программы относятся к следующему этапу.
+Lexical and syntax analysis are complete. The first semantic-analysis part adds read-only name and scope checks. Call arity, type checking, AST optimizations, and program execution are separate stages.
 
 ## Возможности
 
@@ -265,4 +265,35 @@ elements    -> KEYWORD special-form | expr { expr }
 number     ::= ['+' | '-'] digit+ [ '.' digit+ ]
 identifier ::= letter (letter | digit)*
 comment    ::= '//' [^\n]*
+```
+
+## Semantic analysis: scopes and bindings
+
+`Analyzer.check(Program)` checks names and duplicate bindings without modifying the AST:
+
+```java
+Program program = new Parser(new Lexer(source).tokenize()).parse();
+new Analyzer().check(program);
+```
+
+- Reads of definitely unknown identifiers raise `AnalyzerException` with `line:column`.
+- `setq` checks its value before defining or updating its name in the current context.
+- `func`, `lambda`, and `prog` create local contexts. Parameters and `prog` locals are available throughout their bodies; shadowing an outer name is valid.
+- Duplicate parameters or duplicate names in one `prog` local list are errors. Reassignment is allowed.
+- Quoted contents and literal-headed data lists are not evaluated or checked as calls.
+- Built-in names are recognized only in call-head position; a bare name such as `plus` otherwise needs a binding.
+- `cond` and `while` share their enclosing context. Branches use separate analysis snapshots; a name defined on only some paths is marked as possible, with unknown value information.
+- Function bodies are checked in isolated snapshots. Unresolved free names are deferred because a function may run after later declarations. Analyzing or calling a known function does not expose its locals.
+- `eval` and calls with unknown targets may introduce dynamic information. Their effects are not executed during analysis; later uncertain names are deferred, and value facts are discarded conservatively.
+- Top-level `return` and `break` are allowed. Return values are still checked for name errors.
+
+This is partial static analysis: accepting a deferred or dynamic reference does not guarantee that it will exist at runtime. No initialization value is assumed for `prog` locals. All branches and body expressions are checked, including unreachable ones; literal conditions only determine which binding snapshots can flow out.
+
+`Scope.Binding` stores a known `Type`, optional function arity, and whether a binding is definite. `Scope.copy()` isolates analysis state, and `Scope.merge()` combines possible paths. Value information is metadata for the next part, not an implemented type check. Extend `Analyzer.checkCall()` for call validation and `Analyzer.checkExpression()` / `literalBinding()` for type rules; add signatures to `Builtins` when implementing Part 2.
+
+`Main` remains the lexer/parser demo until the final integration stage. Run the scope checks through the API above or their tests:
+
+```sh
+mvn -Dtest=AnalyzerScopeTest test
+mvn clean verify
 ```
