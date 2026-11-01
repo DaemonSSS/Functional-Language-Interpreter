@@ -62,7 +62,10 @@ public class Analyzer {
             return Scope.Binding.UNKNOWN;
         }
         if (expression instanceof WhileExpr loop) {
-            checkExpression(loop.condition, scope);
+            Scope.Binding condBinding = checkExpression(loop.condition, scope);
+            if (condBinding.type != Type.BOOLEAN && condBinding.type != Type.UNKNOWN) {
+                throw new AnalyzerException("Condition must be boolean", loop.condition.line, loop.condition.column);
+            }
             Scope before = scope.copy();
             Scope iteration = scope.copy();
             checkSequence(loop.body, iteration);
@@ -115,7 +118,10 @@ public class Analyzer {
         boolean reachable = true;
         for (CondExpr.Clause clause : cond.clauses) {
             if (!clause.isElse) {
-                checkExpression(clause.test, remaining);
+                Scope.Binding testBinding = checkExpression(clause.test, remaining);
+                if (testBinding.type != Type.BOOLEAN && testBinding.type != Type.UNKNOWN) {
+                    throw new AnalyzerException("Condition must be boolean", clause.test.line, clause.test.column);
+                }
             }
             Scope branch = remaining.copy();
             checkExpression(clause.value, branch);
@@ -137,21 +143,89 @@ public class Analyzer {
         if (list.items.isEmpty() || list.items.get(0) instanceof LiteralExpr) {
             return new Scope.Binding(Type.LIST, null);
         }
+        
         Expression operator = list.items.get(0);
         String builtin = operator instanceof IdentifierExpr identifier && Builtins.contains(identifier.name)
                 ? identifier.name : null;
         Scope.Binding target = Scope.Binding.UNKNOWN;
+        
         if (builtin == null) {
             target = checkExpression(operator, scope);
         }
+        
+        List<Scope.Binding> argBindings = new ArrayList<>();
         for (int i = 1; i < list.items.size(); i++) {
-            checkExpression(list.items.get(i), scope);
+            argBindings.add(checkExpression(list.items.get(i), scope));
         }
-        if ((builtin == null && target.type != Type.FUNCTION) || "eval".equals(builtin)) {
+        
+        int arity = argBindings.size();
+        
+        if (builtin != null) {
+            Integer expectedArity = Builtins.getArity(builtin);
+            if (expectedArity != null && expectedArity != arity) {
+                throw new AnalyzerException("Expected " + expectedArity + " arguments for '" + builtin + "', got " + arity, operator.line, operator.column);
+            }
+
+            checkBuiltinArguments(builtin, argBindings, list.items);
+            
+            if ("eval".equals(builtin)) {
+                scope.allowUnknownNames();
+                scope.forgetValues();
+            }
+            return new Scope.Binding(Builtins.getReturnType(builtin), null);
+        }
+
+        if (target.type == Type.FUNCTION && target.arity != null && target.arity != arity) {
+            throw new AnalyzerException("Function expects " + target.arity + " arguments, got " + arity, operator.line, operator.column);
+        }
+        
+        if (target.type != Type.FUNCTION) {
             scope.allowUnknownNames();
             scope.forgetValues();
         }
+        
         return Scope.Binding.UNKNOWN;
+    }
+
+    private void checkBuiltinArguments(String builtin, List<Scope.Binding> args, List<Expression> items) {
+        switch (builtin) {
+            case "plus": case "minus": case "times": case "divide":
+                for (int i = 0; i < args.size(); i++) {
+                    Type t = args.get(i).type;
+                    if (t != Type.INTEGER && t != Type.REAL && t != Type.UNKNOWN) {
+                        throw new AnalyzerException("Expected numeric argument for '" + builtin + "'", items.get(i + 1).line, items.get(i + 1).column);
+                    }
+                }
+                break;
+            case "and": case "or": case "xor": case "not":
+                for (int i = 0; i < args.size(); i++) {
+                    Type t = args.get(i).type;
+                    if (t != Type.BOOLEAN && t != Type.UNKNOWN) {
+                        throw new AnalyzerException("Expected boolean argument for '" + builtin + "'", items.get(i + 1).line, items.get(i + 1).column);
+                    }
+                }
+                break;
+            case "equal": case "nonequal": case "less": case "lesseq": case "greater": case "greatereq":
+                for (int i = 0; i < args.size(); i++) {
+                    Type t = args.get(i).type;
+                    if (t != Type.INTEGER && t != Type.REAL && t != Type.BOOLEAN && t != Type.UNKNOWN) {
+                        throw new AnalyzerException("Expected numeric or boolean argument for '" + builtin + "'", items.get(i + 1).line, items.get(i + 1).column);
+                    }
+                }
+                break;
+            case "head": case "tail":
+                Type t1 = args.get(0).type;
+                if (t1 != Type.LIST && t1 != Type.UNKNOWN) {
+                    throw new AnalyzerException("Expected list argument for '" + builtin + "'", items.get(1).line, items.get(1).column);
+                }
+                break;
+            case "cons":
+                Type t2 = args.get(1).type;
+                if (t2 != Type.LIST && t2 != Type.NULL && t2 != Type.UNKNOWN) {
+                    throw new AnalyzerException("Expected list or null as second argument for 'cons'", items.get(2).line, items.get(2).column);
+                }
+                break;
+        }
     }
 
     private Scope.Binding literalBinding(LiteralExpr literal) {
