@@ -1,12 +1,12 @@
-# Functional Language Interpreter — лексер и парсер языка F
+# Functional Language Interpreter — лексер, парсер и оптимизатор языка F
 
-Ручной лексер и синтаксический анализатор для функционального языка **F**, написанные на Java. Лексер разбивает исходный текст на токены, а парсер методом рекурсивного спуска строит **AST** — абстрактное синтаксическое дерево программы.
+Ручной лексер, синтаксический и семантический анализаторы для функционального языка **F**, написанные на Java. Лексер разбивает исходный текст на токены, парсер методом рекурсивного спуска строит **AST** — абстрактное синтаксическое дерево программы, анализатор проверяет имена, области видимости, вызовы и типы, оптимизатор выполняет безопасные преобразования дерева.
 
 ```text
-Исходный текст → Lexer → токены → Parser → AST
+Исходный текст → Lexer → токены → Parser → AST → Analyzer.check() → Optimizer.optimize() → оптимизированное AST
 ```
 
-Lexical and syntax analysis are complete. The first semantic-analysis part adds read-only name and scope checks. Call arity, type checking, AST optimizations, and program execution are separate stages.
+Лексический, синтаксический и семантический анализы и оптимизации AST завершены. Исполнение программ — отдельный этап.
 
 ## Возможности
 
@@ -45,6 +45,8 @@ mvn -version
 .
 ├── pom.xml                       # Java 17, JUnit 5
 ├── README.md
+├── PLAN.md                       # план семантического этапа
+├── REPORT.md                     # отчёт по этапу (2-3 страницы)
 ├── LICENSE
 └── src
     ├── main
@@ -54,7 +56,13 @@ mvn -version
     │   ├── LexerException.java   # лексическая ошибка
     │   ├── Parser.java           # парсер рекурсивного спуска
     │   ├── ParserException.java  # синтаксическая ошибка с координатами
-    │   ├── Main.java             # исходный текст → токены → AST
+    │   ├── Analyzer.java         # семантический анализатор (проверки C1-C4)
+    │   ├── AnalyzerException.java# семантическая ошибка с координатами
+    │   ├── Scope.java            # контексты и привязки имён
+    │   ├── Type.java             # категории типов для частичной проверки
+    │   ├── Builtins.java         # реестр встроенных функций и сигнатур
+    │   ├── Optimizer.java        # оптимизации AST (O1-O3)
+    │   ├── Main.java             # исходный текст → токены → AST → проверка → оптимизация
     │   └── ast
     │       ├── Node.java
     │       ├── Expression.java
@@ -77,7 +85,11 @@ mvn -version
         ├── LexerNumberTest.java
         ├── ParserFoundationTest.java
         ├── ParserExpressionTest.java
-        └── ParserSpecialFormTest.java
+        ├── ParserSpecialFormTest.java
+        ├── AnalyzerScopeTest.java
+        ├── AnalyzerTypeTest.java
+        ├── OptimizerTest.java
+        └── AnalyzerIntegrationTest.java
 ```
 
 ## Сборка
@@ -125,6 +137,9 @@ mvn -Dtest=LexerNumberTest test
 mvn -Dtest=ParserFoundationTest test
 mvn -Dtest=ParserExpressionTest test
 mvn -Dtest=ParserSpecialFormTest test
+mvn -Dtest=AnalyzerScopeTest test
+mvn -Dtest=AnalyzerTypeTest test
+mvn -Dtest=OptimizerTest,AnalyzerIntegrationTest test
 ```
 
 Один метод:
@@ -133,11 +148,11 @@ mvn -Dtest=ParserSpecialFormTest test
 mvn "-Dtest=LexerFoundationTest#emptyInputProducesOnlyEof" test
 ```
 
-Тесты проверяют токены и их координаты, разбор выражений и вложенных списков, AST, специальные формы, правило `else` в `cond` и сообщения об ошибках. Отчёты Surefire находятся в `target/surefire-reports`.
+Тесты проверяют токены и их координаты, разбор выражений и вложенных списков, AST, специальные формы, правило `else` в `cond` и сообщения об ошибках, семантические проверки, оптимизации AST и их согласованность. Отчёты Surefire находятся в `target/surefire-reports`.
 
 ## Запуск демо
 
-Класс `f.Main` печатает исходный текст, поток токенов и AST. При ошибке выводится сообщение `Lexer error:` или `Parser error:` с координатами.
+Класс `f.Main` печатает исходный текст, поток токенов, исходное AST, результат семантической проверки и оптимизированное AST. При ошибке выводится сообщение `Lexer error:`, `Parser error:` или `Analyzer error:` с координатами. Программа с семантической ошибкой не оптимизируется.
 
 Сборка и запуск встроенного примера:
 
@@ -152,7 +167,7 @@ java -cp target/classes f.Main
 java -cp target/classes f.Main --demo
 ```
 
-Демо включает шесть групп: вложенные вызовы, определение и вызов функции, `setq` с цитируемым списком, `cond` с `else`, `lambda`/`while`/`prog` и синтаксические ошибки. Ошибки в последней группе добавлены специально.
+Демо включает группы: вложенные вызовы, определение и вызов функции, `setq` с цитируемым списком, `cond` с `else`, `lambda`/`while`/`prog`, оптимизации O1-O3 с примерами «до и после», случаи сохранения данных и управления, синтаксические и семантические ошибки. Ошибки в последних группах добавлены специально.
 
 Свой исходный текст можно передать аргументом:
 
@@ -166,12 +181,32 @@ java -cp target/classes f.Main "(setq x -12)"
 Program([SetqExpr(x, -12)])
 ```
 
+Примеры оптимизаций:
+
+```sh
+java -cp target/classes f.Main "(not (and true false))"
+java -cp target/classes f.Main "(cond ((not false) 8) (else 0))"
+java -cp target/classes f.Main "(cond (false 1))"
+```
+
+Сообщения соответственно:
+
+```text
+Optimized AST:
+  Program([true])
+Optimized AST:
+  Program([8])
+Optimized AST:
+  Program([null])
+```
+
 Примеры для проверки ошибок:
 
 ```sh
 java -cp target/classes f.Main "(setq x)"
 java -cp target/classes f.Main "()"
 java -cp target/classes f.Main "(plus 1"
+java -cp target/classes f.Main "(plus missing 1)"
 ```
 
 Сообщения соответственно:
@@ -180,6 +215,7 @@ java -cp target/classes f.Main "(plus 1"
 Parser error: Expected value after setq name, found ')' at 1:8
 Parser error: Empty list at 1:1
 Parser error: Unbalanced '(', reached end of input at 1:1
+Analyzer error: Unknown identifier 'missing' at 1:7
 ```
 
 ## Типы токенов
@@ -267,33 +303,61 @@ identifier ::= letter (letter | digit)*
 comment    ::= '//' [^\n]*
 ```
 
-## Semantic analysis: scopes and bindings
+## Semantic analysis and AST optimizations
 
-`Analyzer.check(Program)` checks names and duplicate bindings without modifying the AST:
+The semantic stage runs after parsing and consists of two passes:
+
+```text
+source -> Lexer -> tokens -> Parser -> original AST
+                                          |
+                                   Analyzer.check()
+                                   (read-only checks)
+                                          |
+                                   Optimizer.optimize()
+                                          |
+                                     optimized AST
+```
 
 ```java
 Program program = new Parser(new Lexer(source).tokenize()).parse();
 new Analyzer().check(program);
+Program optimized = new Optimizer().optimize(program);
 ```
 
-- Reads of definitely unknown identifiers raise `AnalyzerException` with `line:column`.
-- `setq` checks its value before defining or updating its name in the current context.
-- `func`, `lambda`, and `prog` create local contexts. Parameters and `prog` locals are available throughout their bodies; shadowing an outer name is valid.
-- Duplicate parameters or duplicate names in one `prog` local list are errors. Reassignment is allowed.
-- Quoted contents and literal-headed data lists are not evaluated or checked as calls.
-- Built-in names are recognized only in call-head position; a bare name such as `plus` otherwise needs a binding.
-- `cond` and `while` share their enclosing context. Branches use separate analysis snapshots; a name defined on only some paths is marked as possible, with unknown value information.
-- Function bodies are checked in isolated snapshots. Unresolved free names are deferred because a function may run after later declarations. Analyzing or calling a known function does not expose its locals.
-- `eval` and calls with unknown targets may introduce dynamic information. Their effects are not executed during analysis; later uncertain names are deferred, and value facts are discarded conservatively.
-- Top-level `return` and `break` are allowed. Return values are still checked for name errors.
+### Checks (read-only, the AST is never modified)
 
-This is partial static analysis: accepting a deferred or dynamic reference does not guarantee that it will exist at runtime. No initialization value is assumed for `prog` locals. All branches and body expressions are checked, including unreachable ones; literal conditions only determine which binding snapshots can flow out.
+- **C1 — name resolution.** Reads of definitely unknown identifiers raise `AnalyzerException` with `line:column`. `setq` checks its value before defining or updating its name in the current context. `func`, `lambda`, and `prog` create local contexts; parameters and `prog` locals are available throughout their bodies, shadowing an outer name is valid. Function bodies are checked in isolated snapshots: unresolved free names are deferred because a function may run after later declarations. `cond` and `while` share their enclosing context; branches use separate analysis snapshots and a name defined on only some paths is marked as possible.
+- **C2 — duplicate bindings.** Duplicate parameters in one `func`/`lambda` and duplicate names in one `prog` local list are errors. Reassignment is allowed.
+- **C3 — call arity.** Argument counts are checked for known built-ins, named functions, direct lambdas, and lambda values assigned to variables. The operator is not counted as an argument. A computed operator whose signature cannot be established is deferred.
+- **C4 — partial types.** Definite mismatches are rejected: numeric built-ins require numeric operands, logical built-ins require Booleans, `cond` tests and `while` conditions must be Boolean when their types are known, `head`/`tail` require a list, `cons` requires a list or `null` as its second argument. Untyped parameters, unknown call results, and `eval` results are `UNKNOWN`; an incomplete inference is never an error.
 
-`Scope.Binding` stores a known `Type`, optional function arity, and whether a binding is definite. `Scope.copy()` isolates analysis state, and `Scope.merge()` combines possible paths. Value information is metadata for the next part, not an implemented type check. Extend `Analyzer.checkCall()` for call validation and `Analyzer.checkExpression()` / `literalBinding()` for type rules; add signatures to `Builtins` when implementing Part 2.
+Quoted contents and literal-headed data lists such as `(4 minus times divide)` are data: they are not resolved or checked as calls. Built-in names are recognized only in call-head position; a bare `plus` otherwise needs a binding. Top-level `return` and `break` are allowed and terminate the program. All branches and body expressions are checked, including unreachable ones.
 
-`Main` remains the lexer/parser demo until the final integration stage. Run the scope checks through the API above or their tests:
+### Optimizations (return a rewritten tree; the input tree is left unchanged)
+
+- **O1 — constant expression folding.** Direct calls to the Boolean built-ins `and`/`or`/`xor`/`not` with only Boolean literal operands are replaced by a Boolean literal at the call's position: `(not (and true false))` becomes `true`. Numeric calls, list operations, user calls, and `eval` are left intact; a non-literal operand is never discarded because F evaluates all arguments eagerly.
+- **O2 — constant conditional simplification.** Children are folded first. Clauses with literal `false` tests are removed; if the first remaining clause is literal `true` or `else`, the whole `cond` is replaced by that clause's value. If unknown tests precede a literal-`true` clause, the unknown tests are kept in order and the `true` clause becomes the final fallback while later clauses are removed. If no clause remains, the conditional becomes `null`.
+- **O3 — unreachable-code removal.** In `Program.exprs` and `func`/`lambda`/`prog`/`while` body lists, expressions after a direct `return` or `break` in the same sequence are removed. A nested function's `return` or a `return` inside a nested `prog` does not terminate the surrounding sequence.
+
+Rewrite boundaries: `QuoteExpr` contents, literal-headed data lists, and computed call-head subtrees are never rewritten, so an indirect call can never turn into a syntactically recognized built-in call or a data list. Every rewrite has a checked precondition and preserves observable behavior (values and types, effects and their order, runtime errors, and control-transfer targets); when a precondition cannot be proved, the expression is left unchanged.
+
+### Limitations
+
+- This is partial static analysis: accepting a deferred or dynamic reference does not guarantee that it exists at runtime. No initialization value is assumed for `prog` locals.
+- `eval` is never executed at compile time; its result type is `UNKNOWN`.
+- Numeric constant folding is not performed: the optimizer must not invent arithmetic, overflow, or rounding semantics. Numeric calls remain intact until execution semantics are fixed.
+- The implemented `cond` uses clause syntax `(cond (test value) ... (else value))` (see the syntax section), not the handout's `(cond test then [else])` form.
+- No interpreter, function inlining, or unused-variable elimination.
+
+### Commands
 
 ```sh
-mvn -Dtest=AnalyzerScopeTest test
 mvn clean verify
+mvn -Dtest=AnalyzerScopeTest test
+mvn -Dtest=AnalyzerTypeTest test
+mvn -Dtest=OptimizerTest,AnalyzerIntegrationTest test
+java -cp target/classes f.Main --demo
+java -cp target/classes f.Main "(not (and true false))"
 ```
+
+The shared report with examples and contributions is in `REPORT.md`.

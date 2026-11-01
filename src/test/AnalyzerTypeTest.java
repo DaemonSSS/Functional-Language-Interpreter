@@ -86,8 +86,9 @@ public class AnalyzerTypeTest {
     void testUnknownParametersAndComputedCalls() {
         assertDoesNotThrow(() -> check("(func f (x) (plus x 1))"));
 
-        assertDoesNotThrow(() -> check("((cond (true plus) (else minus)) 1)"));
-        
+        assertDoesNotThrow(() -> check("(setq plus (lambda (a) a)) (setq minus (lambda (a) a)) "
+                + "((cond (true plus) (else minus)) 1)"));
+
         assertDoesNotThrow(() -> check("(plus (eval '(minus 2 1)) 1)"));
     }
 
