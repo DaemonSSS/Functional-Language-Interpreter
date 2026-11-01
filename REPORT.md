@@ -185,18 +185,3 @@ handout conformance.
 Static diagnostics are honest about their limits: `eval` and computed calls may introduce
 runtime information, unresolvable deferred names are accepted, and `prog` locals have no
 assumed initialization value.
-
-### Lab demonstration plan (5-7 minutes)
-
-1. **Diliia** — the AST pipeline, a scoped binding, and a duplicate/unknown-name error.
-2. **Ilya** — a known function/lambda call, a wrong argument count, a definite type error.
-3. **Rushan** — original vs. optimized AST for O1 and O2, then a quoted expression that
-   remains unchanged.
-4. **All** — why checks run first and why `UNKNOWN` and `eval` limit static guarantees.
-
-One-sentence summaries: *“I implemented the analyzer traversal and local contexts, so we
-can resolve names and reject duplicate bindings without changing the AST.”* (Diliia);
-*“I added argument-count and partial type checks; F has no declared types, so uncertain
-cases remain unknown.”* (Ilya); *“I implemented constant folding and conditional
-simplification, rebuilding AST nodes while preserving quoted data and evaluation
-behavior.”* (Rushan).
