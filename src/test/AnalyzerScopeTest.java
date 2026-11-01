@@ -138,7 +138,12 @@ class AnalyzerScopeTest {
                 "equal", "nonequal", "less", "lesseq", "greater", "greatereq", "isint", "isreal",
                 "isbool", "isnull", "isatom", "islist", "and", "or", "xor", "not", "eval")) {
             assertTrue(Builtins.contains(name), name);
-            assertDoesNotThrow(() -> check("(" + name + " 1)"));
+            StringBuilder call = new StringBuilder("(" + name);
+            for (int i = 0; i < Builtins.getArity(name); i++) {
+                call.append(" (eval 'x)");
+            }
+            call.append(")");
+            assertDoesNotThrow(() -> check(call.toString()), name);
         }
         assertFalse(Builtins.contains("unknown"));
         assertFalse(Builtins.contains("setq"));
@@ -191,9 +196,12 @@ class AnalyzerScopeTest {
     }
 
     @Test
-    void leavesArityAndTypeChecksForPartTwo() {
-        assertDoesNotThrow(() -> check("(plus) (not 1) "
-                + "(func f (x) x) (f 1 2) (while 3 (break))"));
+    void appliesArityAndTypeChecksFromPartTwo() {
+        assertThrows(AnalyzerException.class, () -> check("(plus)"));
+        assertThrows(AnalyzerException.class, () -> check("(not 1)"));
+        assertThrows(AnalyzerException.class, () -> check("(func f (x) x) (f 1 2)"));
+        assertThrows(AnalyzerException.class, () -> check("(while 3 (break))"));
+        assertDoesNotThrow(() -> check("(func f (x) (plus x 1))"));
     }
 
     @Test
