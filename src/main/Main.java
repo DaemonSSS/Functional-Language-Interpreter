@@ -7,13 +7,10 @@ import java.util.List;
 public class Main {
 
     private static final String DEFAULT_SOURCE =
-            "// F language parser demo\n"
+            "// F interpreter demo\n"
             + "(func square (x) (times x x))\n"
-            + "(setq answer +42)\n"
-            + "(setq pi 3.14)\n"
-            + "(setq offset -0.5)\n"
-            + "(cond ((greatereq answer +7) true) (else false))\n"
-            + "'(head (cons 1 null))";
+            + "(setq answer (square 5))\n"
+            + "answer";
 
     public static void main(String[] args) {
         if (args.length == 1 && args[0].equals("--demo")) {
@@ -28,18 +25,29 @@ public class Main {
         String[] sources = {
                 "(plus (times 6 7) (divide 18 3))",
                 "(func square (x) (times x x))\n(square 5)",
-                "(setq data '(10 20 30 40))",
-                "(setq x 12)\n(cond ((greatereq x 7) true) (else false))",
-                "((lambda (x) (plus x 1)) 5)\n"
-                        + "(prog (i acc)\n"
+                "(setq x 5)\n(times x x)",
+                "(setq x 12)\n(cond ((less 7 x) true) (else false))",
+                "(setq flag false)\n(cond (flag (divide 1 0)) (else 7))",
+                "(prog () (prog () (return 1)) 2)",
+                "(setq x 0)\n(while true (setq x 1) (break) (setq x 2))\nx",
+                "(return 7)\n(divide 1 0)",
+                "(prog (i total)\n"
                         + "  (setq i 1)\n"
-                        + "  (setq acc 0)\n"
-                        + "  (while (less i 5)\n"
-                        + "    (setq acc (plus acc i))\n"
+                        + "  (setq total 0)\n"
+                        + "  (while (less i 4)\n"
+                        + "    (setq total (plus total i))\n"
                         + "    (setq i (plus i 1)))\n"
-                        + "  acc)"
+                        + "  total)"
         };
         for (String source : sources) {
+            printSource(source);
+            System.out.println();
+        }
+        String[] runtimeErrors = {
+                "(divide 1 0)",
+                "(setq divisor 0)\n(divide 1 divisor)"
+        };
+        for (String source : runtimeErrors) {
             printSource(source);
             System.out.println();
         }
@@ -90,8 +98,17 @@ public class Main {
                 new Analyzer().check(program);
                 System.out.println("Semantic check: OK");
                 System.out.println();
+                Program optimized = new Optimizer().optimize(program);
                 System.out.println("Optimized AST:");
-                System.out.println("  " + new Optimizer().optimize(program));
+                System.out.println("  " + optimized);
+                try {
+                    Value result = new Interpreter().execute(optimized);
+                    System.out.println();
+                    System.out.println("Result: " + result);
+                } catch (InterpreterException e) {
+                    System.out.println();
+                    System.out.println("Runtime error: " + e.getMessage());
+                }
             } catch (AnalyzerException e) {
                 System.out.println("  Analyzer error: " + e.getMessage());
             }

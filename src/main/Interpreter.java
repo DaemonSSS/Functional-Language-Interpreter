@@ -8,7 +8,13 @@ import java.util.List;
 
 public class Interpreter {
     public Value execute(Program program) {
-        return evaluateSequence(program.exprs, new Environment(null));
+        try {
+            return evaluateSequence(program.exprs, new Environment(null));
+        } catch (ReturnSignal signal) {
+            return signal.value;
+        } catch (BreakSignal signal) {
+            return Value.NULL;
+        }
     }
 
     Value evaluateSequence(List<Expression> expressions, Environment env) {
@@ -17,6 +23,14 @@ public class Interpreter {
             result = evaluate(expression, env);
         }
         return result;
+    }
+
+    private Value evaluateBody(List<Expression> expressions, Environment env) {
+        try {
+            return evaluateSequence(expressions, env);
+        } catch (ReturnSignal signal) {
+            return signal.value;
+        }
     }
 
     Value evaluate(Expression expression, Environment env) {
@@ -42,17 +56,63 @@ public class Interpreter {
             for (String name : prog.locals) {
                 local.declare(name);
             }
-            return evaluateSequence(prog.body, local);
+            return evaluateBody(prog.body, local);
         }
         if (expression instanceof FuncExpr function) {
             Value value = new Value(Type.FUNCTION, new NamedFunction(function, env));
             env.set(function.name, value);
             return value;
         }
+        if (expression instanceof CondExpr cond) {
+            return evaluateCond(cond, env);
+        }
+        if (expression instanceof WhileExpr loop) {
+            return evaluateWhile(loop, env);
+        }
+        if (expression instanceof ReturnExpr result) {
+            Value value = result.value == null ? Value.NULL : evaluate(result.value, env);
+            throw new ReturnSignal(value);
+        }
+        if (expression instanceof BreakExpr) {
+            throw new BreakSignal();
+        }
         if (expression instanceof ListExpr list) {
             return evaluateCall(list, env);
         }
         throw new InterpreterException("Unsupported expression " + expression.getClass().getSimpleName(), expression);
+    }
+
+    private Value evaluateCond(CondExpr cond, Environment env) {
+        for (CondExpr.Clause clause : cond.clauses) {
+            if (clause.isElse) {
+                return evaluate(clause.value, env);
+            }
+            if (requireBoolean(evaluate(clause.test, env), clause.test)) {
+                return evaluate(clause.value, env);
+            }
+        }
+        return Value.NULL;
+    }
+
+    private Value evaluateWhile(WhileExpr loop, Environment env) {
+        while (true) {
+            try {
+                if (!requireBoolean(evaluate(loop.condition, env), loop.condition)) {
+                    break;
+                }
+                evaluateSequence(loop.body, env);
+            } catch (BreakSignal signal) {
+                break;
+            }
+        }
+        return Value.NULL;
+    }
+
+    private boolean requireBoolean(Value value, Expression expression) {
+        if (value.type() != Type.BOOLEAN) {
+            throw new InterpreterException("Condition must be boolean", expression);
+        }
+        return (Boolean) value.data();
     }
 
     private Value evaluateCall(ListExpr call, Environment env) {
@@ -78,7 +138,7 @@ public class Interpreter {
             Value argument = evaluate(call.items.get(i + 1), env);
             local.set(definition.params.get(i), argument);
         }
-        return evaluateSequence(definition.body, local);
+        return evaluateBody(definition.body, local);
     }
 
     private void checkArity(String name, int expected, ListExpr call) {
@@ -131,6 +191,21 @@ public class Interpreter {
         @Override
         public String toString() {
             return "<function " + definition.name + ">";
+        }
+    }
+
+    private static final class ReturnSignal extends RuntimeException {
+        private final Value value;
+
+        private ReturnSignal(Value value) {
+            super(null, null, false, false);
+            this.value = value;
+        }
+    }
+
+    private static final class BreakSignal extends RuntimeException {
+        private BreakSignal() {
+            super(null, null, false, false);
         }
     }
 }
