@@ -44,6 +44,93 @@ public class Interpreter {
             }
             return evaluateSequence(prog.body, local);
         }
+        if (expression instanceof FuncExpr function) {
+            Value value = new Value(Type.FUNCTION, new NamedFunction(function, env));
+            env.set(function.name, value);
+            return value;
+        }
+        if (expression instanceof ListExpr list) {
+            return evaluateCall(list, env);
+        }
         throw new InterpreterException("Unsupported expression " + expression.getClass().getSimpleName(), expression);
+    }
+
+    private Value evaluateCall(ListExpr call, Environment env) {
+        if (call.items.isEmpty() || call.items.get(0) instanceof LiteralExpr) {
+            throw new InterpreterException("Data lists are not supported", call);
+        }
+
+        Expression operator = call.items.get(0);
+        if (operator instanceof IdentifierExpr identifier && Builtins.contains(identifier.name)) {
+            checkArity(identifier.name, Builtins.getArity(identifier.name), call);
+            return evaluateBuiltin(identifier, call, env);
+        }
+
+        Value target = evaluate(operator, env);
+        if (!(target.data() instanceof NamedFunction function)) {
+            throw new InterpreterException("Expected a function", operator);
+        }
+
+        FuncExpr definition = function.definition();
+        checkArity(definition.name, definition.params.size(), call);
+        Environment local = new Environment(function.definingEnvironment());
+        for (int i = 0; i < definition.params.size(); i++) {
+            Value argument = evaluate(call.items.get(i + 1), env);
+            local.set(definition.params.get(i), argument);
+        }
+        return evaluateSequence(definition.body, local);
+    }
+
+    private void checkArity(String name, int expected, ListExpr call) {
+        int actual = call.items.size() - 1;
+        if (actual != expected) {
+            throw new InterpreterException("Expected " + expected + " arguments for '" + name + "', got " + actual,
+                    call.items.get(0));
+        }
+    }
+
+    private Value evaluateBuiltin(IdentifierExpr operator, ListExpr call, Environment env) {
+        return switch (operator.name) {
+            case "plus", "times", "less", "divide" -> evaluateIntegerBuiltin(operator.name, call, env);
+            default -> throw new InterpreterException("Unsupported built-in '" + operator.name + "'", operator);
+        };
+    }
+
+    private Value evaluateIntegerBuiltin(String name, ListExpr call, Environment env) {
+        Expression leftOperand = call.items.get(1);
+        Expression rightOperand = call.items.get(2);
+        Value leftValue = evaluate(leftOperand, env);
+        Value rightValue = evaluate(rightOperand, env);
+        BigInteger left = requireInteger(leftValue, name, leftOperand);
+        BigInteger right = requireInteger(rightValue, name, rightOperand);
+
+        return switch (name) {
+            case "plus" -> new Value(Type.INTEGER, left.add(right));
+            case "times" -> new Value(Type.INTEGER, left.multiply(right));
+            case "less" -> new Value(Type.BOOLEAN, left.compareTo(right) < 0);
+            case "divide" -> new Value(Type.INTEGER, divide(left, right, rightOperand));
+            default -> throw new IllegalStateException("Unexpected integer built-in '" + name + "'");
+        };
+    }
+
+    private BigInteger requireInteger(Value value, String name, Expression operand) {
+        if (value.type() != Type.INTEGER) {
+            throw new InterpreterException("Expected integer argument for '" + name + "'", operand);
+        }
+        return (BigInteger) value.data();
+    }
+
+    private BigInteger divide(BigInteger left, BigInteger right, Expression divisor) {
+        if (right.signum() == 0) {
+            throw new InterpreterException("Division by zero", divisor);
+        }
+        return left.divide(right);
+    }
+
+    private record NamedFunction(FuncExpr definition, Environment definingEnvironment) {
+        @Override
+        public String toString() {
+            return "<function " + definition.name + ">";
+        }
     }
 }
