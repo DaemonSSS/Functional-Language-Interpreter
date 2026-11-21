@@ -1,35 +1,56 @@
-# Functional Language Interpreter — лексер, парсер и оптимизатор языка F
+# F Language Interpreter
 
-Ручной лексер, синтаксический и семантический анализаторы для функционального языка **F**, написанные на Java. Лексер разбивает исходный текст на токены, парсер методом рекурсивного спуска строит **AST** — абстрактное синтаксическое дерево программы, анализатор проверяет имена, области видимости, вызовы и типы, оптимизатор выполняет безопасные преобразования дерева.
+A hand-written lexer, recursive-descent parser, semantic analyzer, AST optimizer, and tree-walking interpreter for the small functional language **F**, implemented in Java 17 with Maven and JUnit 5.
 
-```text
-Исходный текст → Lexer → токены → Parser → AST → Analyzer.check() → Optimizer.optimize() → оптимизированное AST
+![Java](https://img.shields.io/badge/Java-17-orange)
+![Maven](https://img.shields.io/badge/Maven-3.8%2B-blue)
+![JUnit 5](https://img.shields.io/badge/JUnit-5.10.2-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [CLI Usage](#cli-usage)
+- [Language at a Glance](#language-at-a-glance)
+- [Runtime Semantics](#runtime-semantics)
+- [Static Analysis and Optimizations](#static-analysis-and-optimizations)
+- [Project Structure](#project-structure)
+- [Testing](#testing)
+- [Supported Subset and Limitations](#supported-subset-and-limitations)
+- [License](#license)
+
+## Overview
+
+F is a small Lisp-style functional language. This project implements the complete pipeline from source text to runtime value:
+
+```mermaid
+flowchart LR
+    A[F source] --> B[Lexer]
+    B --> C[Tokens]
+    C --> D[Parser]
+    D --> E[Original AST]
+    E --> F[Analyzer.check]
+    F --> G[Optimizer.optimize]
+    G --> H[Interpreter.execute]
+    H --> I[F value or runtime error]
 ```
 
-Лексический, синтаксический и семантический анализы и оптимизации AST завершены. Исполнение программ — отдельный этап.
+- The **lexer** turns source text into positioned tokens.
+- The **parser** builds an abstract syntax tree with one-based line and column positions.
+- The **analyzer** performs read-only checks of names, scopes, arity, and partial types.
+- The **optimizer** returns a safely rewritten tree without modifying the input tree.
+- The **interpreter** executes the optimized tree in a fresh environment and reports positioned runtime errors.
 
-## Возможности
+All stages are implemented and covered by tests. The project also includes a CLI that prints every stage of the pipeline.
 
-- Скобки `(` `)` и quote `'`.
-- Однострочные комментарии `// ...`.
-- Ключевые слова: `quote`, `setq`, `func`, `lambda`, `prog`, `cond`, `while`, `return`, `break`.
-- Логические литералы `true`, `false` и специальное значение `null`.
-- Идентификаторы: первый символ — Unicode-буква, далее буквы или десятичные цифры. Примеры: `plus`, `times`, `divide`, `head`, `cons`, `greatereq`, `myFunc`.
-- Целые числа (`INTEGER`): `123`, `-45`, `+7`.
-- Вещественные числа (`REAL`): `3.14`, `-0.5`, `+12.25`.
-- Вложенные списки, вызовы функций и несколько выражений верхнего уровня.
-- Формы `'expr` и `(quote expr)`, создающие одинаковую структуру `QuoteExpr`.
-- Проверка количества и формы аргументов специальных конструкций.
-- Лексические и синтаксические ошибки с позицией `line:column`.
+## Requirements
 
-Обычные имена функций, например `plus` и `times`, являются идентификаторами. Их вызовы сохраняются как `ListExpr`; количество аргументов таких вызовов на этом этапе не проверяется. Пустой список `()` считается синтаксической ошибкой. Пустые списки параметров и локальных переменных разрешены.
+- **JDK 17** or newer
+- **Apache Maven 3.8** or newer
 
-## Требования
-
-- **JDK 17** или новее.
-- **Apache Maven 3.8** или новее.
-
-Проверка окружения:
+Verify your environment:
 
 ```sh
 java -version
@@ -37,32 +58,306 @@ javac -version
 mvn -version
 ```
 
-Для сборки требуется JDK, включающий `javac`. Если команда `mvn` не найдена, установите Maven и добавьте его каталог `bin` в `PATH`. Команды ниже выполняются из корня проекта, где находится `pom.xml`.
+All commands below are run from the repository root, where `pom.xml` is located.
 
-## Структура проекта
+## Quick Start
+
+Build and run the default example:
+
+```sh
+mvn -q -DskipTests package
+java -cp target/classes f.Main
+```
+
+Run a program from the command line:
+
+```sh
+java -cp target/classes f.Main "(setq x 5) (times x x)"
+```
+
+Run every built-in demo:
+
+```sh
+java -cp target/classes f.Main --demo
+```
+
+Run the full test suite:
+
+```sh
+mvn clean verify
+```
+
+## CLI Usage
+
+`f.Main` prints the source, token stream, original AST, semantic-check result, and optimized AST. After a successful check, it executes the optimized tree and prints the result:
+
+```text
+Result: 25
+```
+
+A failure during execution is reported with its position:
+
+```text
+Runtime error: Division by zero at 1:11
+```
+
+Static errors are reported before execution:
+
+```text
+Lexer error: ...
+Parser error: ...
+Analyzer error: Unknown identifier 'missing' at 1:7
+```
+
+A program with a semantic error is never optimized or executed.
+
+### Examples
+
+Function call:
+
+```sh
+java -cp target/classes f.Main "(func square (x) (times x x)) (square 5)"
+```
+
+```text
+Result: 25
+```
+
+A runtime condition skips a failing branch:
+
+```sh
+java -cp target/classes f.Main "(setq flag false) (cond (flag (divide 1 0)) (else 7))"
+```
+
+```text
+Result: 7
+```
+
+A loop accumulates values:
+
+```sh
+java -cp target/classes f.Main "(prog (i total)
+  (setq i 1)
+  (setq total 0)
+  (while (less i 4)
+    (setq total (plus total i))
+    (setq i (plus i 1)))
+  total)"
+```
+
+```text
+Result: 6
+```
+
+A top-level `return` ends the program:
+
+```sh
+java -cp target/classes f.Main "(return 7) (divide 1 0)"
+```
+
+```text
+Result: 7
+```
+
+A well-formed program can still fail at runtime:
+
+```sh
+java -cp target/classes f.Main "(divide 1 0)"
+```
+
+```text
+Runtime error: Division by zero at 1:11
+```
+
+A static error is owned by the analyzer:
+
+```sh
+java -cp target/classes f.Main "(plus missing 1)"
+```
+
+```text
+Analyzer error: Unknown identifier 'missing' at 1:7
+```
+
+### Optimizer Examples
+
+```sh
+java -cp target/classes f.Main "(not (and true false))"
+java -cp target/classes f.Main "(cond ((not false) 8) (else 0))"
+java -cp target/classes f.Main "(cond (false 1))"
+```
+
+Observed optimized trees and results:
+
+```text
+Program([true])
+Result: true
+
+Program([8])
+Result: 8
+
+Program([null])
+Result: null
+```
+
+## Language at a Glance
+
+### Literals and Names
+
+- Integers: `123`, `-45`, `+7`
+- Reals: `3.14`, `-0.5`, `+12.25`
+- Booleans: `true`, `false`
+- Null: `null`
+- Identifiers: a Unicode letter followed by letters or digits, for example `plus`, `myFunc`, `greatereq`
+- Comments: `// ...`
+
+Function names such as `plus` and `times` are ordinary identifiers. A built-in name is recognized only in call-head position; otherwise it needs a binding.
+
+### Special Forms
+
+| Form | Syntax | Description |
+|---|---|---|
+| `quote` | `(quote expr)` or `'expr` | Produces a `QuoteExpr`; quoted contents are data |
+| `setq` | `(setq name expr)` | Evaluates `expr`, then binds it in the current environment |
+| `func` | `(func name (params) body)` | Defines a named function |
+| `lambda` | `(lambda (params) body)` | Creates an anonymous function |
+| `prog` | `(prog (locals) body)` | Creates a child environment with local names |
+| `cond` | `(cond (test value) ... (else value))` | Clause-based conditional |
+| `while` | `(while condition body)` | Loops while the condition is true |
+| `return` | `(return)` or `(return expr)` | Exits the nearest `prog`, `func`, or `lambda` |
+| `break` | `(break)` | Exits the nearest executing loop |
+
+`cond` uses clause syntax `(cond (test value) ... (else value))`, not the positional form `(cond test then [else])` from the handout. The `else` clause is optional and must be last. A `cond` with no matching clause returns `null`.
+
+### Grammar
+
+```text
+program     -> { expr } EOF
+expr        -> atom | quoted | list
+atom        -> IDENTIFIER | INTEGER | REAL | BOOLEAN | NULL
+quoted      -> QUOTE expr
+list        -> LPAREN KEYWORD special-form RPAREN
+             | LPAREN expr { expr } RPAREN
+```
+
+An empty list `()` is a syntax error. Empty parameter and local-variable lists are allowed.
+
+```text
+number     ::= ['+' | '-'] digit+ [ '.' digit+ ]
+identifier ::= letter (letter | digit)*
+comment    ::= '//' [^\n]*
+```
+
+### Token Types
+
+| Token type | Example | Description |
+|---|---|---|
+| `LPAREN` | `(` | Opening parenthesis |
+| `RPAREN` | `)` | Closing parenthesis |
+| `QUOTE` | `'` | Quote shorthand |
+| `KEYWORD` | `lambda`, `setq` | Special form |
+| `IDENTIFIER` | `head`, `myFunc` | Function or variable name |
+| `INTEGER` | `123`, `-45`, `+7` | Integer literal |
+| `REAL` | `3.14`, `-0.5` | Real literal |
+| `BOOLEAN` | `true`, `false` | Boolean literal |
+| `NULL` | `null` | Null value |
+| `EOF` | end of input | End of the token stream |
+
+## Runtime Semantics
+
+Each call to `Interpreter.execute(Program)` starts with a fresh parent-linked environment. Lookup walks outward. `setq` evaluates its right side first and binds the value in the current environment.
+
+### Values and Numbers
+
+Runtime values are represented by `Value(Type, Object)`:
+
+- Integers use `BigInteger`, so arithmetic is not limited by machine integer overflow.
+- Reals use `BigDecimal`. Real literals parse and evaluate; real arithmetic is not implemented yet.
+- Booleans and `null` have their own runtime types.
+- Named functions are first-class runtime values.
+
+The executed built-ins are `plus`, `times`, `less`, and `divide`. They require integer operands at runtime. `divide` performs integer division truncated toward zero and reports `Division by zero` at the divisor when the right side is zero.
+
+### Scope and Functions
+
+- `prog` creates a child environment. Declared locals hide outer names even before their first assignment; reading an uninitialized local is a runtime error.
+- Named functions capture their defining environment. Each call evaluates arguments once, left to right, binds them in a fresh child environment, and executes the body there.
+- Function bodies are deferred until a call. A function can be recursive because its name is registered before the body runs.
+
+### Control Flow
+
+- `cond` evaluates tests in order, requires a Boolean test result, and evaluates only the selected value. With no match it returns `null`.
+- `while` rechecks its Boolean condition before every iteration, uses the surrounding environment, and always yields `null`.
+- `return` exits the nearest active `prog` or named `func` (and `lambda` once lambdas are executable) and carries its value.
+- `break` exits the nearest executing loop and skips the rest of that loop body.
+- A `return` or `break` that reaches top level ends the program. A top-level `return` carries its value; a top-level `break` yields `null`.
+
+### Runtime Errors
+
+Runtime failures are reported as `InterpreterException` with a message and one-based `line:column` coordinates. Examples include division by zero, calling a non-function, wrong argument counts, non-integer arithmetic operands, and non-Boolean conditions.
+
+Recognized features outside the interpreted subset, such as quoted lists, lambdas, and unsupported built-ins, produce a positioned diagnostic when execution reaches them. A quoted form is never executed accidentally.
+
+## Static Analysis and Optimizations
+
+The semantic stage runs after parsing and has two passes:
+
+```mermaid
+flowchart LR
+    A[Original AST] --> B[Analyzer.check]
+    B --> C[Optimizer.optimize]
+    C --> D[Optimized AST]
+```
+
+`Analyzer.check(Program)` is read-only. `Optimizer.optimize(Program)` returns a new tree and leaves the input tree unchanged. Checks always run first, so an optimization cannot hide a static error in a branch it would later remove.
+
+### Analyzer Checks
+
+- **C1 - Name resolution.** Definitely unknown identifier reads raise `AnalyzerException`. `setq` checks its value before defining its name. `func`, `lambda`, and `prog` create local contexts. Shadowing is valid. Function bodies are checked in isolated snapshots so later declarations remain possible.
+- **C2 - Duplicate bindings.** Duplicate parameters or duplicate `prog` locals are errors. Reassignment is allowed.
+- **C3 - Call arity.** Known built-ins, named functions, direct lambdas, and lambda values have their argument counts checked. The operator is not counted as an argument. Computed operators with unknown signatures are deferred.
+- **C4 - Partial types.** Definite contradictions are rejected: numeric built-ins need numeric operands, logical built-ins need Booleans, `cond` tests and `while` conditions must be Boolean when known, `head`/`tail` need a list, and `cons` needs a list or `null` as its second argument. Incomplete inference is never an error.
+
+Quoted contents and literal-headed data lists such as `(4 minus times divide)` are treated as data, not calls. All branches and body expressions are checked, including unreachable ones.
+
+### Optimizer Rules
+
+- **O1 - Constant folding.** Direct calls to `and`, `or`, `xor`, or `not` with Boolean literal operands are replaced by a Boolean literal at the call position. For example, `(not (and true false))` becomes `true`. Non-literal operands are never discarded.
+- **O2 - Constant conditional simplification.** Literal-`false` clauses are removed. A leading literal-`true` or `else` clause replaces the whole `cond` with its value. Later clauses after a literal-`true` clause are removed. An empty conditional becomes `null`.
+- **O3 - Unreachable-code removal.** Expressions after a direct `return` or `break` in the same sequence are removed. A nested `return` inside an inner `prog` does not terminate the outer sequence.
+
+Rewrite boundaries: quoted contents, literal-headed data lists, and computed call-head subtrees are never rewritten. Every rewrite has a checked precondition and preserves values, types, effect order, runtime errors, and control-transfer targets.
+
+## Project Structure
 
 ```text
 .
-├── pom.xml                       # Java 17, JUnit 5
+├── pom.xml
 ├── README.md
-├── PLAN.md                       # план семантического этапа
-├── REPORT.md                     # отчёт по этапу (2-3 страницы)
 ├── LICENSE
+├── PLAN.md                         # Semantic-analysis stage plan
+├── REPORT.md                       # Semantic-analysis stage report
+├── INTERPRETATION_PLAN.md          # Interpretation stage plan
+├── INTERPRETATION_REPORT.md        # Interpretation stage report
 └── src
     ├── main
-    │   ├── TokenType.java        # типы токенов
-    │   ├── Token.java            # тип, текст, строка и столбец токена
-    │   ├── Lexer.java            # лексический анализатор
-    │   ├── LexerException.java   # лексическая ошибка
-    │   ├── Parser.java           # парсер рекурсивного спуска
-    │   ├── ParserException.java  # синтаксическая ошибка с координатами
-    │   ├── Analyzer.java         # семантический анализатор (проверки C1-C4)
-    │   ├── AnalyzerException.java# семантическая ошибка с координатами
-    │   ├── Scope.java            # контексты и привязки имён
-    │   ├── Type.java             # категории типов для частичной проверки
-    │   ├── Builtins.java         # реестр встроенных функций и сигнатур
-    │   ├── Optimizer.java        # оптимизации AST (O1-O3)
-    │   ├── Main.java             # исходный текст → токены → AST → проверка → оптимизация
+    │   ├── TokenType.java
+    │   ├── Token.java
+    │   ├── Lexer.java
+    │   ├── LexerException.java
+    │   ├── Parser.java
+    │   ├── ParserException.java
+    │   ├── Analyzer.java
+    │   ├── AnalyzerException.java
+    │   ├── Scope.java
+    │   ├── Type.java
+    │   ├── Builtins.java
+    │   ├── Optimizer.java
+    │   ├── Interpreter.java
+    │   ├── InterpreterException.java
+    │   ├── Environment.java
+    │   ├── Value.java
+    │   ├── Main.java
     │   └── ast
     │       ├── Node.java
     │       ├── Expression.java
@@ -89,275 +384,75 @@ mvn -version
         ├── AnalyzerScopeTest.java
         ├── AnalyzerTypeTest.java
         ├── OptimizerTest.java
-        └── AnalyzerIntegrationTest.java
+        ├── AnalyzerIntegrationTest.java
+        ├── InterpreterScopeTest.java
+        ├── InterpreterCallTest.java
+        ├── InterpreterControlTest.java
+        └── InterpreterIntegrationTest.java
 ```
 
-## Сборка
+## Testing
 
-Полная сборка с тестами:
-
-```sh
-mvn clean verify
-```
-
-Успешная сборка завершается сообщением `BUILD SUCCESS`.
-
-Сборка без запуска тестов:
-
-```sh
-mvn clean package -DskipTests
-```
-
-Очистка результатов сборки:
-
-```sh
-mvn clean
-```
-
-## Запуск тестов
-
-Все тесты:
+Run all tests:
 
 ```sh
 mvn test
 ```
 
-Тесты с предварительной очисткой результатов сборки:
+Run a single test class:
 
 ```sh
-mvn clean test
+mvn -Dtest=InterpreterControlTest test
 ```
 
-Один класс тестов:
-
-```sh
-mvn -Dtest=LexerFoundationTest test
-mvn -Dtest=LexerWordReadingTest test
-mvn -Dtest=LexerNumberTest test
-mvn -Dtest=ParserFoundationTest test
-mvn -Dtest=ParserExpressionTest test
-mvn -Dtest=ParserSpecialFormTest test
-mvn -Dtest=AnalyzerScopeTest test
-mvn -Dtest=AnalyzerTypeTest test
-mvn -Dtest=OptimizerTest,AnalyzerIntegrationTest test
-```
-
-Один метод:
+Run a single test method:
 
 ```sh
 mvn "-Dtest=LexerFoundationTest#emptyInputProducesOnlyEof" test
 ```
 
-Тесты проверяют токены и их координаты, разбор выражений и вложенных списков, AST, специальные формы, правило `else` в `cond` и сообщения об ошибках, семантические проверки, оптимизации AST и их согласованность. Отчёты Surefire находятся в `target/surefire-reports`.
+The suite contains **228 tests**:
 
-## Запуск демо
+| Stage | Test classes | Tests |
+|---|---|---:|
+| Lexer | `LexerFoundationTest`, `LexerWordReadingTest`, `LexerNumberTest` | 37 |
+| Parser | `ParserFoundationTest`, `ParserExpressionTest`, `ParserSpecialFormTest` | 73 |
+| Analyzer | `AnalyzerScopeTest`, `AnalyzerTypeTest`, `AnalyzerIntegrationTest` | 58 |
+| Optimizer | `OptimizerTest` | 20 |
+| Interpreter | `InterpreterScopeTest`, `InterpreterCallTest`, `InterpreterControlTest`, `InterpreterIntegrationTest` | 40 |
+| **Total** | | **228** |
 
-Класс `f.Main` печатает исходный текст, поток токенов, исходное AST, результат семантической проверки и оптимизированное AST. При ошибке выводится сообщение `Lexer error:`, `Parser error:` или `Analyzer error:` с координатами. Программа с семантической ошибкой не оптимизируется.
+Integration tests execute both the original and optimized trees in separate fresh environments and compare value and type on success, or diagnostic and position on failure. Surefire reports are written to `target/surefire-reports`.
 
-Сборка и запуск встроенного примера:
+## Supported Subset and Limitations
 
-```sh
-mvn -q -DskipTests package
-java -cp target/classes f.Main
-```
+The whole pipeline is implemented, but the **interpreter** intentionally covers a focused subset:
 
-Все демонстрационные примеры:
+| Area | Supported at runtime |
+|---|---|
+| Literals | Integers, Booleans, `null`, real literals |
+| Names and assignment | Identifiers, `setq`, `prog` |
+| Functions | Named multi-argument functions, recursion, defining-environment capture |
+| Built-ins | `plus`, `times`, `less`, `divide` |
+| Control flow | `cond`, `while`, `return`, `break` |
 
-```sh
-java -cp target/classes f.Main --demo
-```
+Recognized but not yet executed:
 
-Демо включает группы: вложенные вызовы, определение и вызов функции, `setq` с цитируемым списком, `cond` с `else`, `lambda`/`while`/`prog`, оптимизации O1-O3 с примерами «до и после», случаи сохранения данных и управления, синтаксические и семантические ошибки. Ошибки в последних группах добавлены специально.
+- Quoted atoms and lists
+- Lambdas
+- Real arithmetic
+- Built-ins other than `plus`, `times`, `less`, and `divide`
+- Runtime `eval`
 
-Свой исходный текст можно передать аргументом:
+These features produce a positioned diagnostic when execution reaches them. The lexer, parser, analyzer, and optimizer still support the full parsed language, including quoted data, lambdas, and all registered built-in names.
 
-```sh
-java -cp target/classes f.Main "(setq x -12)"
-```
+Other limitations:
 
-Результирующее AST:
+- Static analysis is partial: a deferred or dynamic reference may still fail at runtime.
+- `prog` locals have no assumed initialization value.
+- Numeric constant folding is not performed, because the optimizer must not invent arithmetic, overflow, or rounding rules.
+- Function inlining and unused-variable elimination are not implemented.
 
-```text
-Program([SetqExpr(x, -12)])
-```
+## License
 
-Примеры оптимизаций:
-
-```sh
-java -cp target/classes f.Main "(not (and true false))"
-java -cp target/classes f.Main "(cond ((not false) 8) (else 0))"
-java -cp target/classes f.Main "(cond (false 1))"
-```
-
-Сообщения соответственно:
-
-```text
-Optimized AST:
-  Program([true])
-Optimized AST:
-  Program([8])
-Optimized AST:
-  Program([null])
-```
-
-Примеры для проверки ошибок:
-
-```sh
-java -cp target/classes f.Main "(setq x)"
-java -cp target/classes f.Main "()"
-java -cp target/classes f.Main "(plus 1"
-java -cp target/classes f.Main "(plus missing 1)"
-```
-
-Сообщения соответственно:
-
-```text
-Parser error: Expected value after setq name, found ')' at 1:8
-Parser error: Empty list at 1:1
-Parser error: Unbalanced '(', reached end of input at 1:1
-Analyzer error: Unknown identifier 'missing' at 1:7
-```
-
-## Типы токенов
-
-| TokenType | Пример | Описание |
-|-----------|--------|----------|
-| `LPAREN` | `(` | открывающая скобка |
-| `RPAREN` | `)` | закрывающая скобка |
-| `QUOTE` | `'` | сокращённая запись quote |
-| `KEYWORD` | `lambda`, `setq` | специальная форма |
-| `IDENTIFIER` | `head`, `myFunc` | имя функции или переменной |
-| `INTEGER` | `123`, `-45`, `+7` | целое число |
-| `REAL` | `3.14`, `-0.5` | вещественное число |
-| `BOOLEAN` | `true`, `false` | логический литерал |
-| `NULL` | `null` | пустое значение |
-| `EOF` | конец ввода | завершение потока токенов |
-
-## Синтаксис
-
-Основная грамматика:
-
-```text
-program     -> { expr } EOF
-expr        -> atom | quoted | list
-atom        -> IDENTIFIER | INTEGER | REAL | BOOLEAN | NULL
-quoted      -> QUOTE expr
-list        -> LPAREN elements RPAREN
-elements    -> KEYWORD special-form | expr { expr }
-```
-
-Специальная форма распознаётся, когда первым элементом списка является ключевое слово. В остальных случаях создаётся `ListExpr`.
-
-В таблице `expr` означает выражение, `name` — идентификатор, `names` — ноль или больше идентификаторов, `body` — одно или больше выражений.
-
-| Форма | Запись | Проверка |
-|-------|--------|----------|
-| `quote` | `(quote expr)` | ровно одно выражение |
-| `setq` | `(setq name expr)` | имя и ровно одно значение |
-| `func` | `(func name (names) body)` | имя функции, список параметров, непустое тело |
-| `lambda` | `(lambda (names) body)` | список параметров, непустое тело |
-| `prog` | `(prog (names) body)` | список локальных переменных, непустое тело |
-| `cond` | `(cond (test value) ... (else value))` | по два выражения в ветке; необязательный `else` только последним |
-| `while` | `(while expr body)` | условие и непустое тело |
-| `return` | `(return)` или `(return expr)` | ноль или одно выражение |
-| `break` | `(break)` | без аргументов |
-
-`cond` может содержать ноль веток. `else` является обычным идентификатором; в позиции условия ветки `cond` он отмечает ветку по умолчанию. После неё другие ветки запрещены.
-
-## AST
-
-`Program` хранит список выражений верхнего уровня. Все узлы наследуются от `Node` и сохраняют начальную строку и столбец. Узлы специальных форм используют позицию ключевого слова, обычные списки — позицию открывающей скобки.
-
-Числа, логические значения и `null` представлены узлами `LiteralExpr`, имена — `IdentifierExpr`, обычные списки — `ListExpr`. Для каждой специальной формы существует отдельный класс. Метод `toString()` выводит краткое представление дерева для демонстрации.
-
-## Ошибки
-
-Разбор останавливается при первой ошибке. Лексер выбрасывает `LexerException`, парсер — `ParserException`. Строки и столбцы нумеруются с единицы.
-
-Лексические ошибки:
-
-| Ввод | Причина | Сообщение |
-|------|---------|-----------|
-| `12.` | нет цифр после точки | `Malformed number '12.' at 1:1` |
-| `.5` | нет цифр до точки | `Unexpected character '.' at 1:1` |
-| `@` | недопустимый символ | `Unexpected character '@' at 1:1` |
-| `-x` | знак не сопровождается цифрой | `Unexpected character '-' at 1:1` |
-
-Синтаксические ошибки:
-
-| Ввод | Причина | Сообщение |
-|------|---------|-----------|
-| `()` | пустой список | `Empty list at 1:1` |
-| `(plus 1` | незакрытый список | `Unbalanced '(', reached end of input at 1:1` |
-| `(setq x)` | отсутствует значение | `Expected value after setq name, found ')' at 1:8` |
-| `(func 5 (x) x)` | имя функции не является идентификатором | `Expected function name after func, found '5' at 1:7` |
-| `(break 1)` | лишний аргумент | `Expected ')' after break (no arguments), found '1' at 1:8` |
-
-Для незакрытого обычного списка указывается позиция открывающей скобки. Для неверного или отсутствующего аргумента — позиция текущего токена либо конца ввода.
-
-## Грамматика лексем
-
-```text
-number     ::= ['+' | '-'] digit+ [ '.' digit+ ]
-identifier ::= letter (letter | digit)*
-comment    ::= '//' [^\n]*
-```
-
-## Semantic analysis and AST optimizations
-
-The semantic stage runs after parsing and consists of two passes:
-
-```text
-source -> Lexer -> tokens -> Parser -> original AST
-                                          |
-                                   Analyzer.check()
-                                   (read-only checks)
-                                          |
-                                   Optimizer.optimize()
-                                          |
-                                     optimized AST
-```
-
-```java
-Program program = new Parser(new Lexer(source).tokenize()).parse();
-new Analyzer().check(program);
-Program optimized = new Optimizer().optimize(program);
-```
-
-### Checks (read-only, the AST is never modified)
-
-- **C1 — name resolution.** Reads of definitely unknown identifiers raise `AnalyzerException` with `line:column`. `setq` checks its value before defining or updating its name in the current context. `func`, `lambda`, and `prog` create local contexts; parameters and `prog` locals are available throughout their bodies, shadowing an outer name is valid. Function bodies are checked in isolated snapshots: unresolved free names are deferred because a function may run after later declarations. `cond` and `while` share their enclosing context; branches use separate analysis snapshots and a name defined on only some paths is marked as possible.
-- **C2 — duplicate bindings.** Duplicate parameters in one `func`/`lambda` and duplicate names in one `prog` local list are errors. Reassignment is allowed.
-- **C3 — call arity.** Argument counts are checked for known built-ins, named functions, direct lambdas, and lambda values assigned to variables. The operator is not counted as an argument. A computed operator whose signature cannot be established is deferred.
-- **C4 — partial types.** Definite mismatches are rejected: numeric built-ins require numeric operands, logical built-ins require Booleans, `cond` tests and `while` conditions must be Boolean when their types are known, `head`/`tail` require a list, `cons` requires a list or `null` as its second argument. Untyped parameters, unknown call results, and `eval` results are `UNKNOWN`; an incomplete inference is never an error.
-
-Quoted contents and literal-headed data lists such as `(4 minus times divide)` are data: they are not resolved or checked as calls. Built-in names are recognized only in call-head position; a bare `plus` otherwise needs a binding. Top-level `return` and `break` are allowed and terminate the program. All branches and body expressions are checked, including unreachable ones.
-
-### Optimizations (return a rewritten tree; the input tree is left unchanged)
-
-- **O1 — constant expression folding.** Direct calls to the Boolean built-ins `and`/`or`/`xor`/`not` with only Boolean literal operands are replaced by a Boolean literal at the call's position: `(not (and true false))` becomes `true`. Numeric calls, list operations, user calls, and `eval` are left intact; a non-literal operand is never discarded because F evaluates all arguments eagerly.
-- **O2 — constant conditional simplification.** Children are folded first. Clauses with literal `false` tests are removed; if the first remaining clause is literal `true` or `else`, the whole `cond` is replaced by that clause's value. If unknown tests precede a literal-`true` clause, the unknown tests are kept in order and the `true` clause becomes the final fallback while later clauses are removed. If no clause remains, the conditional becomes `null`.
-- **O3 — unreachable-code removal.** In `Program.exprs` and `func`/`lambda`/`prog`/`while` body lists, expressions after a direct `return` or `break` in the same sequence are removed. A nested function's `return` or a `return` inside a nested `prog` does not terminate the surrounding sequence.
-
-Rewrite boundaries: `QuoteExpr` contents, literal-headed data lists, and computed call-head subtrees are never rewritten, so an indirect call can never turn into a syntactically recognized built-in call or a data list. Every rewrite has a checked precondition and preserves observable behavior (values and types, effects and their order, runtime errors, and control-transfer targets); when a precondition cannot be proved, the expression is left unchanged.
-
-### Limitations
-
-- This is partial static analysis: accepting a deferred or dynamic reference does not guarantee that it exists at runtime. No initialization value is assumed for `prog` locals.
-- `eval` is never executed at compile time; its result type is `UNKNOWN`.
-- Numeric constant folding is not performed: the optimizer must not invent arithmetic, overflow, or rounding semantics. Numeric calls remain intact until execution semantics are fixed.
-- The implemented `cond` uses clause syntax `(cond (test value) ... (else value))` (see the syntax section), not the handout's `(cond test then [else])` form.
-- No interpreter, function inlining, or unused-variable elimination.
-
-### Commands
-
-```sh
-mvn clean verify
-mvn -Dtest=AnalyzerScopeTest test
-mvn -Dtest=AnalyzerTypeTest test
-mvn -Dtest=OptimizerTest,AnalyzerIntegrationTest test
-java -cp target/classes f.Main --demo
-java -cp target/classes f.Main "(not (and true false))"
-```
-
-The shared report with examples and contributions is in `REPORT.md`.
+This project is licensed under the MIT License. See [`LICENSE`](LICENSE) for details.
