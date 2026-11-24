@@ -276,7 +276,9 @@ Runtime values are represented by `Value(Type, Object)`:
 - Booleans and `null` have their own runtime types.
 - Named functions are first-class runtime values.
 
-The executed built-ins are `plus`, `times`, `less`, and `divide`. They require integer operands at runtime. `divide` performs integer division truncated toward zero and reports `Division by zero` at the divisor when the right side is zero.
+The numeric built-ins `plus`, `times`, `less`, and `divide` require integer operands at runtime. `divide` performs integer division truncated toward zero and reports `Division by zero` at the divisor when the right side is zero.
+
+`(quote expr)` and `'expr` return the expression as data. `eval` evaluates its argument once, then executes any quoted expression it receives in the caller's environment. For example, `(eval '(plus 1 2))` returns `3`. A quoted expression can also be saved with `setq` and passed to `eval` later.
 
 ### Scope and Functions
 
@@ -296,7 +298,7 @@ The executed built-ins are `plus`, `times`, `less`, and `divide`. They require i
 
 Runtime failures are reported as `InterpreterException` with a message and one-based `line:column` coordinates. Examples include division by zero, calling a non-function, wrong argument counts, non-integer arithmetic operands, and non-Boolean conditions.
 
-Recognized features outside the interpreted subset, such as quoted lists, lambdas, and unsupported built-ins, produce a positioned diagnostic when execution reaches them. A quoted form is never executed accidentally.
+Recognized features outside the interpreted subset, such as lambdas and unsupported built-ins, produce a positioned diagnostic when execution reaches them.
 
 ## Static Analysis and Optimizations
 
@@ -411,7 +413,7 @@ Run a single test method:
 mvn "-Dtest=LexerFoundationTest#emptyInputProducesOnlyEof" test
 ```
 
-The suite contains **228 tests**:
+The suite contains **233 tests**:
 
 | Stage | Test classes | Tests |
 |---|---|---:|
@@ -419,8 +421,8 @@ The suite contains **228 tests**:
 | Parser | `ParserFoundationTest`, `ParserExpressionTest`, `ParserSpecialFormTest` | 73 |
 | Analyzer | `AnalyzerScopeTest`, `AnalyzerTypeTest`, `AnalyzerIntegrationTest` | 58 |
 | Optimizer | `OptimizerTest` | 20 |
-| Interpreter | `InterpreterScopeTest`, `InterpreterCallTest`, `InterpreterControlTest`, `InterpreterIntegrationTest` | 40 |
-| **Total** | | **228** |
+| Interpreter | `InterpreterScopeTest`, `InterpreterCallTest`, `InterpreterControlTest`, `InterpreterIntegrationTest` | 45 |
+| **Total** | | **233** |
 
 Integration tests execute both the original and optimized trees in separate fresh environments and compare value and type on success, or diagnostic and position on failure. Surefire reports are written to `target/surefire-reports`.
 
@@ -433,16 +435,16 @@ The whole pipeline is implemented, but the **interpreter** intentionally covers 
 | Literals | Integers, Booleans, `null`, real literals |
 | Names and assignment | Identifiers, `setq`, `prog` |
 | Functions | Named multi-argument functions, recursion, defining-environment capture |
-| Built-ins | `plus`, `times`, `less`, `divide` |
+| Quotation | `quote`, `'` shorthand |
+| Built-ins | `plus`, `times`, `less`, `divide`, `eval` |
 | Control flow | `cond`, `while`, `return`, `break` |
 
 Recognized but not yet executed:
 
-- Quoted atoms and lists
+- Execution of unquoted literal-headed lists
 - Lambdas
 - Real arithmetic
-- Built-ins other than `plus`, `times`, `less`, and `divide`
-- Runtime `eval`
+- Built-ins other than `plus`, `times`, `less`, `divide`, and `eval`
 
 These features produce a positioned diagnostic when execution reaches them. The lexer, parser, analyzer, and optimizer still support the full parsed language, including quoted data, lambdas, and all registered built-in names.
 

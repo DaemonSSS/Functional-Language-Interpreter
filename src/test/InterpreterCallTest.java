@@ -22,6 +22,40 @@ class InterpreterCallTest {
     }
 
     @Test
+    void evaluatesQuotedCallsWithEitherQuoteSyntax() {
+        assertValue(integer("3"), "(eval '(plus 1 2))");
+        assertValue(integer("3"), "(eval (quote (plus 1 2)))");
+    }
+
+    @Test
+    void quotesDataWithoutLookingUpNamesOrRunningSideEffects() {
+        assertEquals(Type.ATOM, interpreter.execute(parse("'missing")).type());
+        assertEquals(Type.LIST, interpreter.execute(parse("'(divide 1 0)")).type());
+        assertValue(integer("1"), "(setq x 1) '(setq x 2) x");
+        assertValue(integer("5"), "'5");
+    }
+
+    @Test
+    void evaluatesStoredCodeOnceInTheCallersScope() {
+        assertValue(integer("11"), """
+                (setq x 1)
+                (setq code '(setq x (plus x 1)))
+                (prog (x) (setq x 10) (eval code) x)
+                """);
+    }
+
+    @Test
+    void evaluatesOneLevelOfQuotationAtATime() {
+        assertValue(integer("7"), "(setq name (eval ''x)) (setq x 7) (eval name)");
+        assertValue(integer("4"), "(eval (plus 2 2))");
+    }
+
+    @Test
+    void reportsErrorsAtTheirPositionInStoredCode() {
+        assertRuntimeError("(setq code '(divide 1 0))\n(eval code)", "Division by zero", 1, 23);
+    }
+
+    @Test
     void evaluatesUserArgumentsOnceInTheCallerEnvironment() {
         assertValue(integer("12"), """
                 (setq counter 0)
