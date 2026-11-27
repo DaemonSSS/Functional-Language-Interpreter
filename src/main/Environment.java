@@ -19,6 +19,7 @@ class Environment {
     void declare(String name) {
         values.put(name, null);
     }
+    
     //записывает имя и значение в таблицу
     void set(String name, Value value) {
         values.put(name, value);

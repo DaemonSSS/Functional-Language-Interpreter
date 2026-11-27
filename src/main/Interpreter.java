@@ -67,10 +67,13 @@ public class Interpreter {
             if (quote.inner instanceof LiteralExpr literal) {
                 return evaluate(literal, env);
             }
-            //сохраняем узел с его позицией, имена будут разрешены при вызове eval
+            //сохраняем узел с его позицией, имена будут разрешены при вызове eval (x либо (plus 1 2))
             Type type = quote.inner instanceof IdentifierExpr ? Type.ATOM : Type.LIST;
             return new Value(type, quote.inner);
         }
+        // (setq formula '(plus x 2))
+        // (setq x 10)
+        // (eval formula)
         if (expression instanceof SetqExpr setq) {
             //сначала рекурсивно вычисляем правую часть например(setq x (plus 1 2))
             Value value = evaluate(setq.value, env);
@@ -95,7 +98,6 @@ public class Interpreter {
             env.set(function.name, value);
             return value;
         }
-        //
         if (expression instanceof CondExpr cond) {
             return evaluateCond(cond, env);
         }
@@ -193,6 +195,7 @@ public class Interpreter {
         return switch (operator.name) {
             case "plus", "times", "less", "divide" -> evaluateIntegerBuiltin(operator.name, call, env);
             case "eval" -> {
+                //первое это eval имя второе само выражение (дерево)
                 Value argument = evaluate(call.items.get(1), env);
                 yield argument.data() instanceof Expression code ? evaluate(code, env) : argument;
             }
