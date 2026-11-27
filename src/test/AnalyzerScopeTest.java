@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//видимость имён, затенение, снимки областей и слияние веток
 class AnalyzerScopeTest {
     private Program parse(String source) {
         return new Parser(new Lexer(source).tokenize()).parse();

@@ -2,6 +2,7 @@ package f.ast;
 
 import java.util.List;
 
+//корень AST, хранит выражения в порядке выполнения
 public class Program extends Node {
     public final List<Expression> exprs;
 

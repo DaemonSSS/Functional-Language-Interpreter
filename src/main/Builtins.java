@@ -2,6 +2,7 @@ package f;
 
 import java.util.Set;
 
+//общий реестр имён, числа аргументов и типов встроенных функций
 public final class Builtins {
     private static final Set<String> NAMES = Set.of(
             "plus", "minus", "times", "divide",
@@ -17,6 +18,7 @@ public final class Builtins {
         return NAMES.contains(name);
     }
 
+    //у неизвестного имени нет известного числа аргументов
     public static Integer getArity(String name) {
         return switch (name) {
             case "head", "tail", "isint", "isreal", "isbool",
@@ -28,6 +30,7 @@ public final class Builtins {
         };
     }
 
+    //числовой результат зависит от аргументов, поэтому его тип UNKNOWN
     public static Type getReturnType(String name) {
         return switch (name) {
             case "equal", "nonequal", "less", "lesseq", "greater",

@@ -7,6 +7,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//атомы, вложенные списки, quote и ошибки скобок
 public class ParserExpressionTest {
 
     private Program parseSource(String source) {
@@ -21,7 +22,7 @@ public class ParserExpressionTest {
         assertEquals(5, prog.exprs.size());
         assertInstanceOf(IdentifierExpr.class, prog.exprs.get(0));
         assertEquals("x", ((IdentifierExpr) prog.exprs.get(0)).name);
-        
+
         assertInstanceOf(LiteralExpr.class, prog.exprs.get(1));
         assertEquals("123", ((LiteralExpr) prog.exprs.get(1)).lexeme);
     }

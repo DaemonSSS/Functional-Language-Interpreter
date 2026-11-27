@@ -9,7 +9,19 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//структура специальных форм и их синтаксические ограничения
 class ParserSpecialFormTest {
+
+    //ключевые слова внутри quote нужны для сборки специальных форм через cons
+    @Test
+    void quotesKeywordsAsAtomsInBothSyntaxes() {
+        for (String name : List.of("quote", "setq", "func", "lambda", "prog", "cond", "while", "return", "break")) {
+            QuoteExpr shortForm = assertInstanceOf(QuoteExpr.class, expression("'" + name));
+            QuoteExpr longForm = assertInstanceOf(QuoteExpr.class, expression("(quote " + name + ")"));
+            assertEquals(name, assertInstanceOf(IdentifierExpr.class, shortForm.inner).name);
+            assertEquals(shortForm.toString(), longForm.toString());
+        }
+    }
 
     private Program parse(String source) {
         return new Parser(new Lexer(source).tokenize()).parse();

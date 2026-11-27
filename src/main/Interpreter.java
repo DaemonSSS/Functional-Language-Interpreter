@@ -4,13 +4,16 @@ import f.ast.*;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.MathContext;
+import java.util.ArrayList;
 import java.util.List;
 
+//выполняет AST и передаёт значения между окружениями
 public class Interpreter {
     //запустить программу
     public Value execute(Program program) {
         try {
-            //null значит что у самого внешнего окружения нет родителя -> начинаем с пустой таблицы переменных
+            //внешнее окружение пустое и не имеет родителя
             return evaluateSequence(program.exprs, new Environment(null));
             //если до самого верхнего уровня дошел return сигнал
         } catch (ReturnSignal signal) {
@@ -20,12 +23,11 @@ public class Interpreter {
             return Value.NULL;
         }
     }
-    
+
     //проходимся по выражениям внутри последовательности и оцениваем их
     Value evaluateSequence(List<Expression> expressions, Environment env) {
         Value result = Value.NULL;
-        //результатом становится значение последнего выражения, иначе если список пуст то null 
-        //значения переменных берутся из окружения в котором находится выражения 
+        //результат это последнее значение, для пустой последовательности остаётся null
         for (Expression expression : expressions) {
             result = evaluate(expression, env);
         }
@@ -40,44 +42,29 @@ public class Interpreter {
             return signal.value;
         }
     }
-    
+
     //получает узел дерева и выбирает действие по типу узла
     Value evaluate(Expression expression, Environment env) {
-        //если литерал
-        if (expression instanceof LiteralExpr literal) {
-            return switch (literal.type) {
-                //слева именно тип токена т.е. фрагмента кода, справа тип значения итогового
-                //"5"
-                case INTEGER -> new Value(Type.INTEGER, new BigInteger(literal.lexeme));
-                //"2.5"
-                case REAL -> new Value(Type.REAL, new BigDecimal(literal.lexeme));
-                //"false"
-                case BOOLEAN -> new Value(Type.BOOLEAN, Boolean.valueOf(literal.lexeme));
-                //"null"
-                case NULL -> Value.NULL;
-                default -> throw new InterpreterException("Unsupported literal '" + literal.lexeme + "'", literal);
-            };
+        //готовое значение появляется при eval списка с функцией внутри
+        if (expression instanceof QuotedData.ValueExpr runtime) {
+            return runtime.value;
         }
-        //текущее значение переменной (x) например
+        if (expression instanceof LiteralExpr literal) {
+            return QuotedData.quote(literal);
+        }
         if (expression instanceof IdentifierExpr identifier) {
-            //чекаем есть ли оно в окружении
             return env.lookup(identifier);
         }
         if (expression instanceof QuoteExpr quote) {
-            if (quote.inner instanceof LiteralExpr literal) {
-                return evaluate(literal, env);
-            }
-            //сохраняем узел с его позицией, имена будут разрешены при вызове eval (x либо (plus 1 2))
-            Type type = quote.inner instanceof IdentifierExpr ? Type.ATOM : Type.LIST;
-            return new Value(type, quote.inner);
+            return QuotedData.quote(quote.inner);
         }
-        // (setq formula '(plus x 2))
-        // (setq x 10)
-        // (eval formula)
+        //(setq formula '(plus x 2))
+        //(setq x 10)
+        //(eval formula)
         if (expression instanceof SetqExpr setq) {
             //сначала рекурсивно вычисляем правую часть например(setq x (plus 1 2))
             Value value = evaluate(setq.value, env);
-            //в окружении записываем результат 
+            //в окружении записываем результат
             env.set(setq.name, value);
             return value;
         }
@@ -91,12 +78,15 @@ public class Interpreter {
             //запуск тела блока чтобы можно было return сделать
             return evaluateBody(prog.body, local);
         }
-        //сохраняет определение функции с текущим окружением на момент создания
-        //записывает под ее именем и возвращает саму функцию как выражение, вызов функции самой позже
+        //функция хранит ссылку на окружение объявления, тело выполнится при вызове
         if (expression instanceof FuncExpr function) {
-            Value value = new Value(Type.FUNCTION, new NamedFunction(function, env));
+            Value value = new Value(Type.FUNCTION, new FunctionValue(function.name, function.params, function.body, env));
             env.set(function.name, value);
             return value;
+        }
+        //лямбда захватывает окружение так же, как именованная функция
+        if (expression instanceof LambdaExpr lambda) {
+            return new Value(Type.FUNCTION, new FunctionValue(null, lambda.params, lambda.body, env));
         }
         if (expression instanceof CondExpr cond) {
             return evaluateCond(cond, env);
@@ -129,7 +119,7 @@ public class Interpreter {
         }
         return Value.NULL;
     }
-    //проверяет условие кондишна в самом начале - пока равно вычисляем выражение
+    //перед каждой итерацией заново проверяем условие цикла
     private Value evaluateWhile(WhileExpr loop, Environment env) {
         while (true) {
             try {
@@ -154,7 +144,7 @@ public class Interpreter {
     //вызов функции
     private Value evaluateCall(ListExpr call, Environment env) {
         if (call.items.isEmpty() || call.items.get(0) instanceof LiteralExpr) {
-            throw new InterpreterException("Data lists are not supported", call);
+            return QuotedData.quote(call);
         }
         //название функции
         Expression operator = call.items.get(0);
@@ -163,25 +153,23 @@ public class Interpreter {
             checkArity(identifier.name, Builtins.getArity(identifier.name), call);
             return evaluateBuiltin(identifier, call, env);
         }
-        
+
         //проверяем есть ли такое название пользовательской в окружении
         Value target = evaluate(operator, env);
-        if (!(target.data() instanceof NamedFunction function)) {
+        if (!(target.data() instanceof FunctionValue function)) {
             throw new InterpreterException("Expected a function", operator);
         }
-        
-        //если пользовательская - вычисляет, какая функция стоит на первом месте, проверяет число аргументов и создаёт окружение вызова
-        //аргументы вычисляются слева направо в окружении вызывающего кода, а тело работает в новом окружении, родитель которого — окружение объявления функции
-        FuncExpr definition = function.definition();
-        checkArity(definition.name, definition.params.size(), call);
+
+        //аргументы считаем у вызывающего кода, тело запускаем в окружении замыкания
+        checkArity(function.name() == null ? "lambda" : function.name(), function.params().size(), call);
         Environment local = new Environment(function.definingEnvironment());
-        for (int i = 0; i < definition.params.size(); i++) {
+        for (int i = 0; i < function.params().size(); i++) {
             Value argument = evaluate(call.items.get(i + 1), env);
-            local.set(definition.params.get(i), argument);
+            local.set(function.params().get(i), argument);
         }
-        return evaluateBody(definition.body, local);
+        return evaluateBody(function.body(), local);
     }
-   //чекнуть количество аргов
+    //проверяем число аргументов до их вычисления
     private void checkArity(String name, int expected, ListExpr call) {
         int actual = call.items.size() - 1;
         if (actual != expected) {
@@ -189,56 +177,143 @@ public class Interpreter {
                     call.items.get(0));
         }
     }
-    
-    //по имени выбирает встроенную функцию
+
+    //сначала вычисляем все аргументы слева направо, потом применяем функцию
     private Value evaluateBuiltin(IdentifierExpr operator, ListExpr call, Environment env) {
-        return switch (operator.name) {
-            case "plus", "times", "less", "divide" -> evaluateIntegerBuiltin(operator.name, call, env);
-            case "eval" -> {
-                //первое это eval имя второе само выражение (дерево)
-                Value argument = evaluate(call.items.get(1), env);
-                yield argument.data() instanceof Expression code ? evaluate(code, env) : argument;
-            }
-            default -> throw new InterpreterException("Unsupported built-in '" + operator.name + "'", operator);
-        };
-    }
-
-    //считаем выражение встроенной функции
-    private Value evaluateIntegerBuiltin(String name, ListExpr call, Environment env) {
-        Expression leftOperand = call.items.get(1);
-        Expression rightOperand = call.items.get(2);
-        Value leftValue = evaluate(leftOperand, env);
-        Value rightValue = evaluate(rightOperand, env);
-        BigInteger left = requireInteger(leftValue, name, leftOperand);
-        BigInteger right = requireInteger(rightValue, name, rightOperand);
-
+        List<Value> args = new ArrayList<>();
+        for (int i = 1; i < call.items.size(); i++) {
+            args.add(evaluate(call.items.get(i), env));
+        }
+        String name = operator.name;
+        Value first = args.get(0);
+        Expression firstNode = call.items.get(1);
         return switch (name) {
-            case "plus" -> new Value(Type.INTEGER, left.add(right));
-            case "times" -> new Value(Type.INTEGER, left.multiply(right));
-            case "less" -> new Value(Type.BOOLEAN, left.compareTo(right) < 0);
-            case "divide" -> new Value(Type.INTEGER, divide(left, right, rightOperand));
-            default -> throw new IllegalStateException("Unexpected integer built-in '" + name + "'");
+            case "plus", "minus", "times", "divide" -> numeric(name, args, call);
+            case "equal", "nonequal", "less", "lesseq", "greater", "greatereq" ->
+                    compare(name, args, call);
+            case "and", "or", "xor", "not" -> logical(name, args, call);
+            case "isint" -> bool(first.type() == Type.INTEGER);
+            case "isreal" -> bool(first.type() == Type.REAL);
+            case "isbool" -> bool(first.type() == Type.BOOLEAN);
+            case "isnull" -> bool(first.type() == Type.NULL);
+            case "isatom" -> bool(first.type() == Type.ATOM);
+            case "islist" -> bool(first.type() == Type.LIST);
+            case "head", "tail" -> {
+                List<Value> items = QuotedData.items(first, firstNode);
+                if (items.isEmpty()) {
+                    throw new InterpreterException("Cannot take " + name + " of an empty list", firstNode);
+                }
+                yield name.equals("head") ? items.get(0)
+                        : new Value(Type.LIST, List.copyOf(items.subList(1, items.size())));
+            }
+            case "cons" -> {
+                List<Value> items = new ArrayList<>();
+                items.add(first);
+                Value rest = args.get(1);
+                if (rest.type() != Type.NULL) {
+                    items.addAll(QuotedData.items(rest, call.items.get(2)));
+                }
+                yield new Value(Type.LIST, List.copyOf(items));
+            }
+            case "eval" -> evaluate(QuotedData.code(first, firstNode), env);
+            default -> throw new InterpreterException("Unknown built-in '" + name + "'", operator);
         };
     }
 
-    private BigInteger requireInteger(Value value, String name, Expression operand) {
-        if (value.type() != Type.INTEGER) {
-            throw new InterpreterException("Expected integer argument for '" + name + "'", operand);
+    //два целых дают целое, при наличии real переходим к BigDecimal
+    private Value numeric(String name, List<Value> args, ListExpr call) {
+        Value left = args.get(0);
+        Value right = args.get(1);
+        requireNumber(left, name, call.items.get(1));
+        requireNumber(right, name, call.items.get(2));
+        if (name.equals("divide") && decimal(right).signum() == 0) {
+            throw new InterpreterException("Division by zero", call.items.get(2));
         }
-        return (BigInteger) value.data();
+        if (left.type() == Type.INTEGER && right.type() == Type.INTEGER) {
+            BigInteger a = (BigInteger) left.data();
+            BigInteger b = (BigInteger) right.data();
+            BigInteger result = switch (name) {
+                case "plus" -> a.add(b);
+                case "minus" -> a.subtract(b);
+                case "times" -> a.multiply(b);
+                default -> a.divide(b);
+            };
+            return new Value(Type.INTEGER, result);
+        }
+        BigDecimal a = decimal(left);
+        BigDecimal b = decimal(right);
+        //DECIMAL128 задаёт 34 значащие цифры и округление HALF_EVEN
+        BigDecimal result = switch (name) {
+            case "plus" -> a.add(b, MathContext.DECIMAL128);
+            case "minus" -> a.subtract(b, MathContext.DECIMAL128);
+            case "times" -> a.multiply(b, MathContext.DECIMAL128);
+            default -> a.divide(b, MathContext.DECIMAL128);
+        };
+        return new Value(Type.REAL, result);
     }
 
-    private BigInteger divide(BigInteger left, BigInteger right, Expression divisor) {
-        if (right.signum() == 0) {
-            throw new InterpreterException("Division by zero", divisor);
+    private void requireNumber(Value value, String name, Expression operand) {
+        if (value.type() != Type.INTEGER && value.type() != Type.REAL) {
+            throw new InterpreterException("Expected numeric argument for '" + name + "'", operand);
         }
-        return left.divide(right);
     }
 
-    private record NamedFunction(FuncExpr definition, Environment definingEnvironment) {
+    private BigDecimal decimal(Value value) {
+        return value.type() == Type.INTEGER ? new BigDecimal((BigInteger) value.data())
+                : (BigDecimal) value.data();
+    }
+
+    //сравниваем числа между собой или два boolean, false меньше true
+    private Value compare(String name, List<Value> args, ListExpr call) {
+        Value left = args.get(0);
+        Value right = args.get(1);
+        int order;
+        if (left.type() == Type.BOOLEAN && right.type() == Type.BOOLEAN) {
+            order = Boolean.compare((Boolean) left.data(), (Boolean) right.data());
+        } else {
+            requireNumber(left, name, call.items.get(1));
+            requireNumber(right, name, call.items.get(2));
+            order = decimal(left).compareTo(decimal(right));
+        }
+        return bool(switch (name) {
+            case "equal" -> order == 0;
+            case "nonequal" -> order != 0;
+            case "less" -> order < 0;
+            case "lesseq" -> order <= 0;
+            case "greater" -> order > 0;
+            default -> order >= 0;
+        });
+    }
+
+    //and и or тоже вычисляют оба аргумента, оптимизатор не должен терять их эффекты
+    private Value logical(String name, List<Value> args, ListExpr call) {
+        for (int i = 0; i < args.size(); i++) {
+            if (args.get(i).type() != Type.BOOLEAN) {
+                throw new InterpreterException("Expected boolean argument for '" + name + "'", call.items.get(i + 1));
+            }
+        }
+        boolean left = (Boolean) args.get(0).data();
+        if (name.equals("not")) {
+            return bool(!left);
+        }
+        boolean right = (Boolean) args.get(1).data();
+        return bool(switch (name) {
+            case "and" -> left && right;
+            case "or" -> left || right;
+            default -> left ^ right;
+        });
+    }
+
+    private Value bool(boolean value) {
+        return new Value(Type.BOOLEAN, value);
+    }
+
+    //замыкание хранит параметры, тело и ссылку на окружение объявления
+    private record FunctionValue(String name, List<String> params, List<Expression> body,
+                                 Environment definingEnvironment) {
         @Override
         public String toString() {
-            return "<function " + definition.name + ">";
+            return name == null ? "<lambda>" : "<function " + name + ">";
         }
     }
 

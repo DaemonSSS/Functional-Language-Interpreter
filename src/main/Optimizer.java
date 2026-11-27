@@ -5,12 +5,15 @@ import f.ast.*;
 import java.util.ArrayList;
 import java.util.List;
 
+//строит оптимизированное дерево, не меняя исходное
 public class Optimizer {
 
+    //исходный корень не меняем, создаём новую программу
     public Program optimize(Program program) {
         return new Program(optimizeSequence(program.exprs), program.line, program.column);
     }
 
+    //после прямого return или break остаток этой последовательности недостижим
     private List<Expression> optimizeSequence(List<Expression> expressions) {
         List<Expression> optimized = new ArrayList<>();
         for (Expression expression : expressions) {
@@ -23,7 +26,13 @@ public class Optimizer {
         return optimized;
     }
 
+    //quote и простые значения сохраняем, остальные узлы обходим рекурсивно
     private Expression optimizeExpression(Expression expression) {
+        Expression result = rewriteExpression(expression);
+        return result == expression ? result : result.withDiagnosticPosition(expression);
+    }
+
+    private Expression rewriteExpression(Expression expression) {
         if (expression instanceof QuoteExpr
                 || expression instanceof LiteralExpr
                 || expression instanceof IdentifierExpr
@@ -64,6 +73,7 @@ public class Optimizer {
         throw new IllegalArgumentException("Unsupported expression: " + expression.getClass().getSimpleName());
     }
 
+    //списки данных и вычисляемый оператор не переписываем
     private Expression optimizeList(ListExpr list) {
         if (list.items.isEmpty() || list.items.get(0) instanceof LiteralExpr) {
             return list;
@@ -77,6 +87,7 @@ public class Optimizer {
         return folded != null ? folded : new ListExpr(items, list.line, list.column);
     }
 
+    //сворачиваем только известную логическую функцию с одними литералами
     private Expression foldBooleanCall(List<Expression> items, ListExpr list) {
         if (!(items.get(0) instanceof IdentifierExpr identifier)) {
             return null;
@@ -106,6 +117,7 @@ public class Optimizer {
         return new LiteralExpr(TokenType.BOOLEAN, result ? "true" : "false", list.line, list.column);
     }
 
+    //убираем false, выбираем первую гарантированную ветку и сохраняем живой префикс
     private Expression optimizeConditional(CondExpr cond) {
         List<CondExpr.Clause> clauses = new ArrayList<>();
         for (CondExpr.Clause clause : cond.clauses) {

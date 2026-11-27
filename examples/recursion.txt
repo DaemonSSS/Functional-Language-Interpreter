@@ -1,0 +1,5 @@
+//функция видит собственное имя в окружении объявления
+(func factorial (n)
+  (cond ((lesseq n 1) 1)
+        (else (times n (factorial (minus n 1))))))
+(factorial 5)

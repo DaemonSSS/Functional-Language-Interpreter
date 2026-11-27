@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+//целые и вещественные числа, знаки и неверная запись числа
 class LexerNumberTest {
 
     private static List<Token> tokenize(String src) {

@@ -7,6 +7,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//число аргументов и противоречия в известных типах
 public class AnalyzerTypeTest {
 
     private Program parse(String source) {
@@ -65,7 +66,7 @@ public class AnalyzerTypeTest {
 
         AnalyzerException e3 = assertThrows(AnalyzerException.class, () -> check("(while 3 (break))"));
         assertTrue(e3.getMessage().contains("Condition must be boolean"));
-        
+
         AnalyzerException e4 = assertThrows(AnalyzerException.class, () -> check("(cond (1 2) (else 3))"));
         assertTrue(e4.getMessage().contains("Condition must be boolean"));
     }
@@ -74,7 +75,7 @@ public class AnalyzerTypeTest {
     void testListOperations() {
         assertDoesNotThrow(() -> check("(cons 1 '(2))"));
         assertDoesNotThrow(() -> check("(cons 1 null)"));
-        
+
         AnalyzerException e1 = assertThrows(AnalyzerException.class, () -> check("(head 1)"));
         assertTrue(e1.getMessage().contains("Expected list argument"));
 
@@ -104,7 +105,7 @@ public class AnalyzerTypeTest {
 
     @Test
     void testAstUnchangedOnFailure() {
-        Program program = parse("(plus true)"); 
+        Program program = parse("(plus true)");
         ListExpr list = (ListExpr) program.exprs.get(0);
         int initialSize = list.items.size();
         Expression initialArg = list.items.get(1);

@@ -2,120 +2,122 @@ package f;
 
 import f.ast.Program;
 
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.List;
 
+//читает файл и показывает каждый этап выполнения программы
 public class Main {
-
-    private static final String DEFAULT_SOURCE =
-            "// F interpreter demo\n"
-            + "(func square (x) (times x x))\n"
-            + "(setq answer (square 5))\n"
-            + "answer";
+    private static final Path EXAMPLES = Path.of("examples");
 
     public static void main(String[] args) {
-        if (args.length == 1 && args[0].equals("--demo")) {
-            runDemo();
-            return;
-        }
-        String source = args.length > 0 ? String.join(" ", args) : DEFAULT_SOURCE;
-        printSource(source);
-    }
-
-    private static void runDemo() {
-        String[] sources = {
-                "(plus (times 6 7) (divide 18 3))",
-                "(func square (x) (times x x))\n(square 5)",
-                "(setq x 5)\n(times x x)",
-                "(setq x 12)\n(cond ((less 7 x) true) (else false))",
-                "(setq flag false)\n(cond (flag (divide 1 0)) (else 7))",
-                "(prog () (prog () (return 1)) 2)",
-                "(setq x 0)\n(while true (setq x 1) (break) (setq x 2))\nx",
-                "(return 7)\n(divide 1 0)",
-                "(prog (i total)\n"
-                        + "  (setq i 1)\n"
-                        + "  (setq total 0)\n"
-                        + "  (while (less i 4)\n"
-                        + "    (setq total (plus total i))\n"
-                        + "    (setq i (plus i 1)))\n"
-                        + "  total)"
-        };
-        for (String source : sources) {
-            printSource(source);
-            System.out.println();
-        }
-        String[] runtimeErrors = {
-                "(divide 1 0)",
-                "(setq divisor 0)\n(divide 1 divisor)"
-        };
-        for (String source : runtimeErrors) {
-            printSource(source);
-            System.out.println();
-        }
-        String[] optimizations = {
-                "(not (and true false))",
-                "(cond ((not false) 8) (else 0))",
-                "(cond (false 1))",
-                "(setq flag false)\n"
-                        + "(setq x 0)\n"
-                        + "(cond (flag (setq x 1)) (true (setq x 2)) (else (setq x 3)))\n"
-                        + "x",
-                "'(plus missing true)\n(4 minus times divide)\n(eval '(plus 1 2))\n(return 1)"
-        };
-        for (String source : optimizations) {
-            printSource(source);
-            System.out.println();
-        }
-        String[] errors = {"(setq x)", "(func 5 (x) x)", "'()", "(plus 1", "(break 1)"};
-        for (String source : errors) {
-            printSource(source);
-            System.out.println();
-        }
-        String[] semanticErrors = {"(plus missing 1)", "(func bad (x x) x)", "(plus 1)", "(not 1)"};
-        for (String source : semanticErrors) {
-            printSource(source);
-            System.out.println();
+        int status = run(args, System.out, System.err);
+        if (status != 0) {
+            System.exit(status);
         }
     }
 
-    private static void printSource(String source) {
+    //отдельный метод позволяет проверить CLI без завершения JVM
+    static int run(String[] args, PrintStream out, PrintStream err) {
+        try {
+            if (args.length == 0) {
+                return runFile(EXAMPLES.resolve("demo.txt"), out, err);
+            }
+            if (args.length == 1 && (args[0].equals("--help") || args[0].equals("-h"))) {
+                printUsage(out);
+                return 0;
+            }
+            if (args.length == 1 && args[0].equals("--demo")) {
+                return runDemo(out, err);
+            }
+            if (args.length == 2 && args[0].equals("--file")) {
+                return runFile(Path.of(args[1]), out, err);
+            }
+            if (args.length >= 2 && args[0].equals("--source")) {
+                return printSource(String.join(" ", List.of(args).subList(1, args.length)), out, err);
+            }
+            if (args.length == 1 && !args[0].startsWith("--")) {
+                return runFile(Path.of(args[0]), out, err);
+            }
+            printUsage(err);
+            return 2;
+        } catch (IOException | InvalidPathException e) {
+            err.println("Input error: " + e.getMessage());
+            return 2;
+        }
+    }
 
-        System.out.println("Source:");
-        System.out.println(source);
-        System.out.println();
-        System.out.println("Tokens:");
+    //UTF-8 сохраняет русские комментарии, BOM в начале файла пропускаем
+    private static int runFile(Path path, PrintStream out, PrintStream err) throws IOException {
+        String source = Files.readString(path, StandardCharsets.UTF_8);
+        if (source.startsWith("\uFEFF")) {
+            source = source.substring(1);
+        }
+        out.println("File: " + path);
+        return printSource(source, out, err);
+    }
 
+    //каждый txt из examples запускается отдельно, в порядке имён файлов
+    private static int runDemo(PrintStream out, PrintStream err) throws IOException {
+        List<Path> paths;
+        try (var files = Files.list(EXAMPLES)) {
+            paths = files.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".txt"))
+                    .sorted().toList();
+        }
+        if (paths.isEmpty()) {
+            err.println("Input error: no .txt examples in " + EXAMPLES);
+            return 2;
+        }
+        int status = 0;
+        for (Path path : paths) {
+            status = Math.max(status, runFile(path, out, err));
+            out.println();
+        }
+        return status;
+    }
+
+    private static void printUsage(PrintStream out) {
+        out.println("Usage: java -cp target/classes f.Main [file.txt]");
+        out.println("       java -cp target/classes f.Main --file file.txt");
+        out.println("       java -cp target/classes f.Main --source \"(plus 1 2)\"");
+        out.println("       java -cp target/classes f.Main --demo");
+        out.println("Without arguments: examples/demo.txt. Run from the repository root.");
+    }
+
+    //проверки идут до оптимизации, чтобы она не скрыла ошибку в исходнике
+    private static int printSource(String source, PrintStream out, PrintStream err) {
+        out.println("Source:");
+        out.println(source);
+        out.println();
         try {
             List<Token> tokens = new Lexer(source).tokenize();
+            out.println("Tokens:");
             for (Token token : tokens) {
-                System.out.println("  " + token);
+                out.println("  " + token);
             }
-            System.out.println();
             Program program = new Parser(tokens).parse();
-            System.out.println("AST:");
-            System.out.println("  " + program);
-            System.out.println();
-            try {
-                new Analyzer().check(program);
-                System.out.println("Semantic check: OK");
-                System.out.println();
-                Program optimized = new Optimizer().optimize(program);
-                System.out.println("Optimized AST:");
-                System.out.println("  " + optimized);
-                try {
-                    Value result = new Interpreter().execute(optimized);
-                    System.out.println();
-                    System.out.println("Result: " + result);
-                } catch (InterpreterException e) {
-                    System.out.println();
-                    System.out.println("Runtime error: " + e.getMessage());
-                }
-            } catch (AnalyzerException e) {
-                System.out.println("  Analyzer error: " + e.getMessage());
-            }
-        } catch (ParserException e) {
-            System.out.println("  Parser error: " + e.getMessage());
+            out.println("\nAST:\n  " + program);
+            new Analyzer().check(program);
+            out.println("\nSemantic check: OK");
+            Program optimized = new Optimizer().optimize(program);
+            out.println("\nOptimized AST:\n  " + optimized);
+            Value result = new Interpreter().execute(optimized);
+            out.println("\nResult: " + result);
+            return 0;
         } catch (LexerException e) {
-            System.out.println("  Lexer error: " + e.getMessage());
+            err.println("Lexer error: " + e.getMessage());
+        } catch (ParserException e) {
+            err.println("Parser error: " + e.getMessage());
+        } catch (AnalyzerException e) {
+            err.println("Analyzer error: " + e.getMessage());
+        } catch (InterpreterException e) {
+            err.println("Runtime error: " + e.getMessage());
         }
+        return 1;
     }
 }

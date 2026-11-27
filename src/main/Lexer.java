@@ -3,6 +3,7 @@ package f;
 import java.util.ArrayList;
 import java.util.List;
 
+//читает исходный текст слева направо и собирает токены
 public class Lexer {
 
     private final String source;
@@ -13,6 +14,7 @@ public class Lexer {
         this.source = source;
     }
 
+    //EOF тоже добавляем, чтобы парсер всегда видел конец потока
     public List<Token> tokenize() {
         List<Token> tokens = new ArrayList<>();
         Token t;
@@ -23,6 +25,7 @@ public class Lexer {
         return tokens;
     }
 
+    //запоминаем начало токена до чтения его символов
     private Token nextToken() {
         skipWhitespaceAndComments();
         if (isAtEnd()) {
@@ -56,6 +59,7 @@ public class Lexer {
                 "Unexpected character '" + c + "' at " + startLine + ":" + startColumn);
     }
 
+    //пробелы и комментарии пропускаем, позиции продолжают считаться
     private void skipWhitespaceAndComments() {
         while (!isAtEnd()) {
             char c = peek();
@@ -80,6 +84,7 @@ public class Lexer {
         return source.charAt(current + 1);
     }
 
+    //перенос строки сбрасывает столбец к единице
     private char advance() {
         char c = source.charAt(current);
         current++;
@@ -96,6 +101,7 @@ public class Lexer {
         return current >= source.length();
     }
 
+    //отличаем ключевые слова и литералы от обычных имён
     private Token readWord(int startLine, int startColumn) {
         StringBuilder text = new StringBuilder();
 
@@ -138,6 +144,7 @@ public class Lexer {
         return new Token(type, lexeme, startLine, startColumn);
     }
 
+    //после точки обязательно должна быть хотя бы одна цифра
     private Token readNumber(int startLine, int startColumn) {
         StringBuilder text = new StringBuilder();
 

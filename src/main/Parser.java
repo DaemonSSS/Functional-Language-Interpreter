@@ -5,6 +5,7 @@ import f.ast.*;
 import java.util.ArrayList;
 import java.util.List;
 
+//разбирает поток токенов рекурсивным спуском и строит AST
 public class Parser {
     private final List<Token> tokens;
     private int current = 0;
@@ -13,6 +14,7 @@ public class Parser {
         this.tokens = tokens;
     }
 
+    //программа может содержать несколько выражений или быть пустой
     public Program parse() {
         Token first = peek();
         List<Expression> exprs = new ArrayList<>();
@@ -24,6 +26,7 @@ public class Parser {
         return new Program(exprs, line, col);
     }
 
+    //вид первого токена определяет способ разбора выражения
     public Expression parseExpr() {
         if (isAtEnd()) {
             Token t = peek();
@@ -44,7 +47,7 @@ public class Parser {
         if (t.type == TokenType.IDENTIFIER) {
             advance();
             return new IdentifierExpr(t.lexeme, t.line, t.column);
-        } else if (t.type == TokenType.INTEGER || t.type == TokenType.REAL || 
+        } else if (t.type == TokenType.INTEGER || t.type == TokenType.REAL ||
                    t.type == TokenType.BOOLEAN || t.type == TokenType.NULL) {
             advance();
             return new LiteralExpr(t.type, t.lexeme, t.line, t.column);
@@ -55,10 +58,20 @@ public class Parser {
 
     private Expression parseQuoted() {
         Token quoteToken = advance();
-        Expression inner = parseExpr();
+        Expression inner = parseQuoteValue();
         return new QuoteExpr(inner, quoteToken.line, quoteToken.column);
     }
 
+    //в quote ключевое слово тоже может быть атомом, например 'setq
+    private Expression parseQuoteValue() {
+        if (check(TokenType.KEYWORD)) {
+            Token token = advance();
+            return new IdentifierExpr(token.lexeme, token.line, token.column);
+        }
+        return parseRequiredExpr("expression after quote");
+    }
+
+    //ключевое слово начинает специальную форму, иначе это список выражений
     private Expression parseList() {
         Token open = expect(TokenType.LPAREN, "'('");
         if (check(TokenType.KEYWORD)) {
@@ -79,10 +92,11 @@ public class Parser {
         return new ListExpr(items, open.line, open.column);
     }
 
+    //каждая форма проверяет свою структуру и съедает закрывающую скобку
     private Expression parseSpecialForm(Token keyword) {
         switch (keyword.lexeme) {
             case "quote": {
-                Expression inner = parseRequiredExpr("expression after quote");
+                Expression inner = parseQuoteValue();
                 expect(TokenType.RPAREN, "')' after quote expression");
                 return new QuoteExpr(inner, keyword.line, keyword.column);
             }
@@ -152,6 +166,7 @@ public class Parser {
         }
     }
 
+    //параметры и локальные имена разбираются одинаково, пустой список допустим
     private List<String> parseParamList() {
         expect(TokenType.LPAREN, "'(' before name list");
         List<String> names = new ArrayList<>();
@@ -162,6 +177,7 @@ public class Parser {
         return names;
     }
 
+    //в теле нужна хотя бы одна форма
     private List<Expression> parseBody() {
         List<Expression> body = new ArrayList<>();
         body.add(parseRequiredExpr("at least one expression in body"));
@@ -171,6 +187,7 @@ public class Parser {
         return body;
     }
 
+    //сообщаем об отсутствующем выражении в месте, где его ожидали
     private Expression parseRequiredExpr(String what) {
         if (check(TokenType.RPAREN) || isAtEnd()) {
             Token t = peek();
@@ -196,6 +213,7 @@ public class Parser {
         return peek().type == type;
     }
 
+    //проверяем нужный токен до перехода к следующему
     Token expect(TokenType type, String what) {
         Token t = peek();
         if (t.type != type) {

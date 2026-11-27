@@ -5,6 +5,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+//токены скобок, пробелы, комментарии и координаты ошибок
 class LexerFoundationTest {
 
     private static List<Token> tokenize(String src) {

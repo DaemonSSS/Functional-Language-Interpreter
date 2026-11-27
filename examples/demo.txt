@@ -1,0 +1,5 @@
+//измените 5 на 8 и запустите файл ещё раз без пересборки
+(func square (x)
+  (times x x))
+(setq answer (square 5))
+answer

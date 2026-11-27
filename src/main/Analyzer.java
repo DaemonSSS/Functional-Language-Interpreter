@@ -7,7 +7,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+//проверяет имена, области видимости, число аргументов и известные типы
 public class Analyzer {
+    //каждая проверка начинает с новой области и не меняет AST
     public void check(Program program) {
         checkSequence(program.exprs, new Scope(null));
     }
@@ -18,6 +20,7 @@ public class Analyzer {
         }
     }
 
+    //возвращаем только те сведения о типе, которые удалось доказать
     private Scope.Binding checkExpression(Expression expression, Scope scope) {
         if (expression instanceof LiteralExpr literal) {
             return literalBinding(literal);
@@ -89,6 +92,7 @@ public class Analyzer {
         throw new IllegalArgumentException("Unsupported expression: " + expression.getClass().getSimpleName());
     }
 
+    //тело выполнится позже, поэтому проверяем его в отдельном снимке области
     private void checkFunction(List<String> params, List<Expression> body,
                                Node owner, Scope scope, String name) {
         Scope captured = scope.copy();
@@ -102,6 +106,7 @@ public class Analyzer {
         checkSequence(body, local);
     }
 
+    //в одном списке имён дубликаты запрещены, затенение внешних имён допустимо
     private void defineNames(List<String> names, String kind, Node owner, Scope scope) {
         Set<String> seen = new HashSet<>();
         for (String name : names) {
@@ -112,6 +117,7 @@ public class Analyzer {
         }
     }
 
+    //ветки проверяем отдельно, затем объединяем сведения о достижимых путях
     private void checkConditional(CondExpr cond, Scope scope) {
         Scope remaining = scope.copy();
         List<Scope> alternatives = new ArrayList<>();
@@ -139,27 +145,28 @@ public class Analyzer {
         scope.merge(alternatives);
     }
 
+    //первый элемент это оператор, остальные аргументы проверяем слева направо
     private Scope.Binding checkCall(ListExpr list, Scope scope) {
         if (list.items.isEmpty() || list.items.get(0) instanceof LiteralExpr) {
             return new Scope.Binding(Type.LIST, null);
         }
-        
+
         Expression operator = list.items.get(0);
         String builtin = operator instanceof IdentifierExpr identifier && Builtins.contains(identifier.name)
                 ? identifier.name : null;
         Scope.Binding target = Scope.Binding.UNKNOWN;
-        
+
         if (builtin == null) {
             target = checkExpression(operator, scope);
         }
-        
+
         List<Scope.Binding> argBindings = new ArrayList<>();
         for (int i = 1; i < list.items.size(); i++) {
             argBindings.add(checkExpression(list.items.get(i), scope));
         }
-        
+
         int arity = argBindings.size();
-        
+
         if (builtin != null) {
             Integer expectedArity = Builtins.getArity(builtin);
             if (expectedArity != null && expectedArity != arity) {
@@ -167,7 +174,7 @@ public class Analyzer {
             }
 
             checkBuiltinArguments(builtin, argBindings, list.items);
-            
+
             if ("eval".equals(builtin)) {
                 scope.allowUnknownNames();
                 scope.forgetValues();
@@ -178,15 +185,16 @@ public class Analyzer {
         if (target.type == Type.FUNCTION && target.arity != null && target.arity != arity) {
             throw new AnalyzerException("Function expects " + target.arity + " arguments, got " + arity, operator.line, operator.column);
         }
-        
+
         if (target.type != Type.FUNCTION) {
             scope.allowUnknownNames();
             scope.forgetValues();
         }
-        
+
         return Scope.Binding.UNKNOWN;
     }
 
+    //UNKNOWN не считаем ошибкой, окончательные типы проверит интерпретатор
     private void checkBuiltinArguments(String builtin, List<Scope.Binding> args, List<Expression> items) {
         switch (builtin) {
             case "plus": case "minus": case "times": case "divide":

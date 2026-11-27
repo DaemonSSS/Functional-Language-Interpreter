@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+//базовые узлы дерева и работа парсера с потоком токенов
 class ParserFoundationTest {
 
     private static Parser parser(String src) {

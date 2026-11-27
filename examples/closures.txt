@@ -1,0 +1,5 @@
+//у каждого вызова makeadder своё окружение с offset
+(setq makeadder (lambda (offset)
+  (lambda (x) (plus x offset))))
+(setq addten (makeadder 10))
+(addten 7)

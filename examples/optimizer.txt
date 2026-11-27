@@ -1,0 +1,5 @@
+//логическая свёртка выбирает ветку с return, остаток тела удаляется
+(prog ()
+  (cond ((not (and true false)) (return 8))
+        (else 0))
+  (divide 1 0))

@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//вызовы, quote, eval, порядок аргументов и ошибки выполнения
 class InterpreterCallTest {
     private final Interpreter interpreter = new Interpreter();
 
@@ -124,7 +125,7 @@ class InterpreterCallTest {
     @Test
     void checksRuntimeArgumentTypes() {
         assertRuntimeError("(func double (x)\n  (times 2 x))\n(double false)",
-                "Expected integer argument for 'times'", 2, 12);
+                "Expected numeric argument for 'times'", 2, 12);
     }
 
     @Test
@@ -150,13 +151,15 @@ class InterpreterCallTest {
     }
 
     @Test
-    void reportsUnsupportedDataListsWithoutEvaluatingTheirItems() {
-        assertRuntimeError("(4 minus times divide (divide 1 0))", "Data lists are not supported", 1, 1);
+    void returnsDataListsWithoutEvaluatingTheirItems() {
+        Value value = interpreter.execute(parse("(4 minus times divide (divide 1 0))"));
+        assertEquals(Type.LIST, value.type());
+        assertEquals("(4 minus times divide (divide 1 0))", value.toString());
     }
 
     @Test
-    void reportsUnsupportedBuiltinAtTheCallHead() {
-        assertRuntimeError("(head '(1 2))", "Unsupported built-in 'head'", 1, 2);
+    void executesHeadOnQuotedData() {
+        assertValue(integer("1"), "(head '(1 2))");
     }
 
     private Value integer(String value) {

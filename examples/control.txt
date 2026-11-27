@@ -1,0 +1,10 @@
+//сумма 1 + 2 + 3, break оставляет счётчик на четырёх
+(prog (i total)
+  (setq i 1)
+  (setq total 0)
+  (while true
+    (cond ((greatereq i 4) (break)))
+    (setq total (plus total i))
+    (setq i (plus i 1)))
+  (return total)
+  999)

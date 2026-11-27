@@ -4,19 +4,20 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
+//имена, ключевые слова и литералы boolean и null
 public class LexerWordReadingTest {
 
     @Test
     public void testIdentifiers() {
         Lexer lexer = new Lexer("x plus head cons greatereq var123");
         List<Token> tokens = lexer.tokenize();
-        
+
         assertEquals(TokenType.IDENTIFIER, tokens.get(0).type);
         assertEquals("x", tokens.get(0).lexeme);
-        
+
         assertEquals(TokenType.IDENTIFIER, tokens.get(1).type);
         assertEquals("plus", tokens.get(1).lexeme);
-        
+
         assertEquals(TokenType.IDENTIFIER, tokens.get(5).type);
         assertEquals("var123", tokens.get(5).lexeme);
     }
@@ -43,7 +44,7 @@ public class LexerWordReadingTest {
 
         assertEquals(TokenType.KEYWORD, tokens.get(1).type);
         assertEquals("while", tokens.get(1).lexeme);
-        
+
         assertEquals(TokenType.KEYWORD, tokens.get(4).type);
         assertEquals("setq", tokens.get(4).lexeme);
     }
@@ -66,11 +67,11 @@ public class LexerWordReadingTest {
     @Test
     public void testInvalidUnderscoreThrowsException() {
         Lexer lexer = new Lexer("my_variable");
-        
+
         LexerException exception = assertThrows(LexerException.class, () -> {
             lexer.tokenize();
         });
-        
+
         assertTrue(exception.getMessage().contains("Unexpected character '_'"));
     }
 

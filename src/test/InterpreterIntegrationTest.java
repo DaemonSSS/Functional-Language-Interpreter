@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//полный конвейер и одинаковое выполнение двух версий дерева
 class InterpreterIntegrationTest {
     private final Interpreter interpreter = new Interpreter();
 
@@ -75,6 +76,25 @@ class InterpreterIntegrationTest {
 
     private Value integer(String value) {
         return new Value(Type.INTEGER, new BigInteger(value));
+    }
+
+    //позиция внешнего операнда должна пережить замену cond на его значение
+    @Test
+    void preservesErrorPositionsWhenConditionalOperandsAreReplaced() {
+        for (String source : List.of("(divide 1 (cond (true 0)))",
+                "(eval (cond (true (cons 'divide '(1 0)))))",
+                "(func invoke (x) (x)) (invoke (cond (true 1)))")) {
+            Program original = parseAndCheck(source);
+            InterpreterException expected = assertThrows(InterpreterException.class,
+                    () -> new Interpreter().execute(original));
+            Program optimized = new Optimizer().optimize(original);
+            Program twice = new Optimizer().optimize(optimized);
+            for (Program tree : List.of(optimized, twice)) {
+                InterpreterException actual = assertThrows(InterpreterException.class,
+                        () -> new Interpreter().execute(tree));
+                assertEquals(expected.getMessage(), actual.getMessage());
+            }
+        }
     }
 
     private Program parse(String source) {

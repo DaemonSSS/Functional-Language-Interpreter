@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//правила переписывания, сохранение исходного дерева и повторная оптимизация
 public class OptimizerTest {
 
     private Program parse(String source) {

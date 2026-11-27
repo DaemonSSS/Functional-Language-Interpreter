@@ -5,21 +5,22 @@ import f.ast.IdentifierExpr;
 import java.util.HashMap;
 import java.util.Map;
 
+//хранит значения текущей области и ссылку на внешнее окружение
 class Environment {
     private final Environment parent;
     //таблица значений переменных
     private final Map<String, Value> values = new HashMap<>();
-     
+
     //создает окружение с собственной пустой таблицей и запоминает родителя
     Environment(Environment parent) {
         this.parent = parent;
     }
-    
+
     //добавляет имя в текущую таблицу и кладёт под ним Java null, используется для prog в локальных переменных
     void declare(String name) {
         values.put(name, null);
     }
-    
+
     //записывает имя и значение в таблицу
     void set(String name, Value value) {
         values.put(name, value);

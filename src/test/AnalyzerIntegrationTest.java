@@ -7,6 +7,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//проверка исходного дерева перед безопасной оптимизацией
 public class AnalyzerIntegrationTest {
 
     private Program parse(String source) {

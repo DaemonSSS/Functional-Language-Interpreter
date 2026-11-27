@@ -7,6 +7,7 @@ import java.math.BigInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//значения, присваивание и локальные окружения
 class InterpreterScopeTest {
     private final Interpreter interpreter = new Interpreter();
 

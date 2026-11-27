@@ -7,6 +7,7 @@ import java.math.BigInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+//ветвления, циклы и границы действия return и break
 class InterpreterControlTest {
     private final Interpreter interpreter = new Interpreter();
 
