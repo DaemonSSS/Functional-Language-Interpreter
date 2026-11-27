@@ -4,9 +4,6 @@
 
 A Lisp-style language implemented in **Java 17**: a hand-written lexer, recursive-descent parser, semantic analyzer, AST optimizer, and tree-walking interpreter. The target platform is the **JVM** on macOS, Linux, or Windows. Execution produces a value directly; this project does not generate bytecode or machine code.
 
-Repository: [DaemonSSS/Functional-Language-Interpreter](https://github.com/DaemonSSS/Functional-Language-Interpreter).
-If access is required, contact **Diliia Faizullina — d.faizullina@innopolis.university**.
-
 ## Build and run
 
 Requirements: JDK 17 or newer and Maven 3.8 or newer. Run commands from the repository root.
